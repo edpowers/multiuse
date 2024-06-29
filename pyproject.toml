@@ -47,3 +47,8 @@ source = ["multiuse"]
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
+
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests"]
+skips = ["B311"]
