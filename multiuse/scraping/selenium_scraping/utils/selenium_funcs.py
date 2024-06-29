@@ -1,12 +1,12 @@
 """Functions for use in selenium."""
 
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.support.ui import WebDriverWait
 
-
-from multiuse.scraping.selenium_scraping.utils import selenium_save_to_file
-from multiuse.scraping.selenium_scraping.utils import setup_selenium
+from multiuse.scraping.selenium_scraping.utils import (
+    selenium_save_to_file,
+    setup_selenium,
+)
 
 
 class SeleniumFuncs(

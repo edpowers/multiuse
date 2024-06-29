@@ -3,10 +3,10 @@
 import os
 from pathlib import Path
 from pprint import pprint
-
 from typing import Dict
 
 import pandas as pd
+
 from multiuse.file_io.parquet_io import ParquetIO
 
 

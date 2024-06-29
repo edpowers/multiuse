@@ -1,19 +1,16 @@
 """System utils for handling filepaths."""
 
-import os
-import inspect
-
-from pathlib import Path
-import pickle
-import hashlib
-from functools import wraps
-
 import ast
-import chardet
-
 import asyncio
+import hashlib
+import inspect
+import os
+import pickle
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, TypeVar
 
-from typing import Any, Callable, TypeVar, Coroutine, Optional, Dict, List, Tuple
+import chardet
 
 T = TypeVar("T")
 
@@ -43,7 +40,7 @@ def persistent_cache(
                 key += f":{k}:{str(v)}"
 
             # Hash the key to create a filename
-            filename: str = hashlib.md5(key.encode()).hexdigest() + ".pickle"
+            filename: str = f"{hashlib.md5(key.encode()).hexdigest()}.pickle"
             cache_file: str = os.path.join(cache_dir, filename)
 
             # Create cache directory if it doesn't exist
@@ -65,7 +62,7 @@ def persistent_cache(
             if asyncio.iscoroutinefunction(func):
                 return asyncio.run(func(*args, **kwargs))
             else:
-                return func(*args, **kwargs)
+                return await func(*args, **kwargs)
 
         return wrapper
 
@@ -79,6 +76,9 @@ class SystemUtils:
     def get_class_file_path(cls: object) -> str:
         # Get the module of the class
         module = inspect.getmodule(cls)
+
+        assert module is not None, f"Could not find {cls=}."
+        # assert isinstance(module, Module), f"Expected {module=} to be a Module
 
         # Get the file path of the module
         file_path = inspect.getfile(module)

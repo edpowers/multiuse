@@ -1,17 +1,15 @@
 """Setup Selenium instance."""
 
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.chrome.options import Options
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.remote.webdriver import WebDriver
 
 
 class SetupSelenium:
     """Setup selenium."""
 
-    def __init__(self, command_executor: str = "", extra_options: dict = None):
+    def __init__(self, command_executor: str = "", extra_options: dict = {}):
         """Initialize the class."""
-        if extra_options is None:
-            extra_options = {}
         self.command_executor = command_executor
         self.extra_options = extra_options
 
@@ -19,12 +17,8 @@ class SetupSelenium:
         """Get the base chrome options."""
         return Options()
 
-    def set_chrome_options(
-        self, options: Options, extra_options: dict = None
-    ) -> Options:
+    def set_chrome_options(self, options: Options, extra_options: dict = {}) -> Options:
         """Set the chrome options."""
-        if extra_options is None:
-            extra_options = {}
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
 

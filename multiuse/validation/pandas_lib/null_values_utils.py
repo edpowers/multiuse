@@ -1,14 +1,13 @@
 """Staticmethods for handling null values."""
 
 import copy
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 class NullValuesUtils:
     """Staticmethods for handling null values."""
-
-    
 
     @staticmethod
     def replace_inf_with_null(df: pd.DataFrame) -> pd.DataFrame:

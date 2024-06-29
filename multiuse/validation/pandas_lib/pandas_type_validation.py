@@ -1,7 +1,8 @@
 """Dataframe Type Validation"""
 
-import pandas as pd
 from typing import Any
+
+import pandas as pd
 
 
 class PandasTypeValidation:

@@ -1,0 +1,61 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/python-poetry/poetry
+    rev: '1.8.2'
+    hooks:
+      - id: poetry-check
+      - id: poetry-lock
+      - id: poetry-install
+
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        types: [python]
+        args: [--check]
+        files: ^multiuse/.*\.py$
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.0
+    hooks:
+      - id: flake8
+        types: [python]
+        files: ^multiuse/.*\.py$
+        exclude: ^(.venv|__pycache__)
+
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.1
+    hooks:
+      - id: mypy
+        types: [python]
+        files: ^multiuse/.*\.py$
+        additional_dependencies:
+          - pandas-stubs==2.2.2.240603
+          - types-tqdm
+          - types-chardet
+          - types-selenium
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black", "--filter-files"]
+        files: ^multiuse/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: .venv/bin/pytest
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [manual]
