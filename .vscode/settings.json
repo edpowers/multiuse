@@ -1,0 +1,11 @@
+{
+    "isort.check": true,
+    "isort.args": [
+        "\"--settings-path\", \"${workspaceFolder}/pyproject.toml\""
+    ],
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always"
+    },
+}

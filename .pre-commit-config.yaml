@@ -47,7 +47,7 @@ repos:
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile", "black", "--filter-files"]
+        args: ["--profile", "black", "--filter-files", "--wl", "80"]
         files: ^multiuse/.*\.py$
 
   - repo: https://github.com/PyCQA/bandit
