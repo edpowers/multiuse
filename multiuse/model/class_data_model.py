@@ -32,6 +32,12 @@ class ClassDataModel(PrettyPrintBaseModel):
         None, description="Relative path from the project root to the module file"
     )
 
+    # Formatted field for pytest coverage executing in subprocess.
+    # Creating here rather than at runtime to minimize ambiguity.
+    coverage_file_path: str = Field(
+        None, description="Path to the coverage file for the class"
+    )
+
     log_path: Path = Field(None, description="Path to the log file for the class")
     logger_name: str = Field(None, description="Name of the logger for the class")
     class_logger: logging.Logger = Field(None, description="Logger for the class")
@@ -80,6 +86,8 @@ class ClassDataModelFactory:
                         .joinpath(f"{class_name}.log")
                     )
 
+                    coverage_file_path = import_path.rsplit(".", maxsplit=1)[0]
+
                     logger_name = f"{class_name}_logger"
 
                     class_logger = SetupLogger.setup_logger(
@@ -107,6 +115,7 @@ class ClassDataModelFactory:
                         ),
                         module_absolute_path=module_path,
                         module_relative_path=relative_path,
+                        coverage_file_path=coverage_file_path,
                         log_path=generated_log_path,
                         logger_name=logger_name,
                         class_logger=class_logger,
