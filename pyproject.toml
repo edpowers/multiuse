@@ -20,6 +20,9 @@ astor = "^0.8.1"
 pydantic = "^2.7.4"
 selenium = "^4.22.0"
 pre-commit = "^3.7.1"
+pyhumps = "^3.8.0"
+pyinstrument = "^4.6.2"
+polars = "^1.4.1"
 
 
 [tool.poetry.group.dev.dependencies]

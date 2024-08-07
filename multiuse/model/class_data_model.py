@@ -4,9 +4,9 @@ import importlib
 import inspect
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
-from pydantic import Field
+from pydantic import Field, computed_field
 
 from multiuse.filepaths.system_utils import SystemUtils
 from multiuse.log_methods.setup_logger import SetupLogger
@@ -47,6 +47,44 @@ class ClassDataModel(PrettyPrintBaseModel):
 
         arbitrary_types_allowed = True
 
+    @computed_field  # type: ignore[misc]
+    @property
+    def import_path(self) -> str:
+        """Return the import path for the class."""
+        return_value: Union[str, Path] = SystemUtils.format_path_for_import(
+            str(self.module_relative_path)
+        )
+        if not isinstance(return_value, str):
+            raise ValueError("Return value is not a string")
+
+        return return_value
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def import_statement(self) -> str:
+        """Return the import statement for the class."""
+        return f"from {self.import_path} import {self.class_name}"
+
+    def raise_if_class_name_not_in_code(self, code: str) -> None:
+        """Raise an exception if the class name is not in the code."""
+        if self.class_name not in code:
+            raise ValueError(f"Class name '{self.class_name}' not found in code")
+
+    def raise_if_import_path_not_in_code(self, code: str) -> None:
+        """Raise an exception if the import path is not in the code."""
+        if self.import_path not in code:
+            raise ImportError(
+                f"Import statement '{self.import_path}' not found in code"
+            )
+
+    def raise_if_no_test_in_code(self, code: str) -> None:
+        """Raise an exception if the test function is not in the code."""
+        # If none of the class methods are in the code, raise an exception
+        if all(f"test_{method}" not in code for method in self.class_methods):
+            # Check if any of the code contains def test_{self.class_name}
+            if f"def test_{self.class_name}" not in code:
+                raise ValueError("No test function found in code")
+
 
 class ClassDataModelFactory:
     def __init__(self, project_root: Path) -> None:
@@ -60,6 +98,18 @@ class ClassDataModelFactory:
                 return class_data
 
         raise KeyError(f"Class '{class_name}' not found in class data models")
+
+    def sort_by_hierarchy(self, flattened_hierachy: List[str]) -> List[ClassDataModel]:
+        # Create a dictionary mapping class names to their index in the reference order
+        order_dict = {
+            class_name: index for index, class_name in enumerate(flattened_hierachy)
+        }
+        # Sort class_data_models based on the order in reference_order
+        sorted_class_data_models = sorted(
+            self.class_data_models,
+            key=lambda x: order_dict.get(x.class_name, len(flattened_hierachy)),
+        )
+        return sorted_class_data_models
 
     def create_from_class_info(
         self, class_info: Dict[str, List[Tuple[str, str, List[str]]]]
@@ -138,7 +188,11 @@ class ClassDataModelFactory:
 
     @staticmethod
     def _get_base_classes(class_to_process: Any) -> List[str]:
-        return [base.__name__ for base in class_to_process.__bases__]
+        return [
+            base.__name__
+            for base in class_to_process.__bases__
+            if base.__name__ not in {"object"}
+        ]
 
     @staticmethod
     def _get_class_attributes(class_to_process: Any) -> List[str]:

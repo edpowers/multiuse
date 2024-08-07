@@ -8,4 +8,8 @@
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always"
     },
+    "files.exclude": {
+        "**/.mypy_cache": true,
+        "**/__pycache__": true,
+    }
 }
