@@ -3,11 +3,25 @@
 import os
 from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
+
 
 class FindProjectRoot:
     @classmethod
-    def find_project_root(cls, start_path: str = "", debug: bool = False) -> Path:
+    def find_project_root(
+        cls,
+        start_path: str = "",
+        debug: bool = False,
+        raise_error_if_no_env_file: bool = False,
+    ) -> Path:
         instance = cls()
+
+        # Load the env vars for MULTIUSE_PROJECT_ROOT
+        load_dotenv(find_dotenv(raise_error_if_not_found=raise_error_if_no_env_file))
+        # IF there's an env var set, use that
+        if os.environ.get("MULTIUSE_PROJECT_ROOT"):
+            return Path(os.environ.get("MULTIUSE_PROJECT_ROOT", ""))
+
         # Usage example
         try:
             project_root = instance._find_project_root(start_path)

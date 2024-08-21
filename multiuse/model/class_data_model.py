@@ -80,10 +80,11 @@ class ClassDataModel(PrettyPrintBaseModel):
     def raise_if_no_test_in_code(self, code: str) -> None:
         """Raise an exception if the test function is not in the code."""
         # If none of the class methods are in the code, raise an exception
-        if all(f"test_{method}" not in code for method in self.class_methods):
-            # Check if any of the code contains def test_{self.class_name}
-            if f"def test_{self.class_name}" not in code:
-                raise ValueError("No test function found in code")
+        if (
+            all(f"test_{method}" not in code for method in self.class_methods)
+            and f"def test_{self.class_name}" not in code
+        ):
+            raise ValueError("No test function found in code")
 
 
 class ClassDataModelFactory:
@@ -104,12 +105,10 @@ class ClassDataModelFactory:
         order_dict = {
             class_name: index for index, class_name in enumerate(flattened_hierachy)
         }
-        # Sort class_data_models based on the order in reference_order
-        sorted_class_data_models = sorted(
+        return sorted(
             self.class_data_models,
             key=lambda x: order_dict.get(x.class_name, len(flattened_hierachy)),
         )
-        return sorted_class_data_models
 
     def create_from_class_info(
         self, class_info: Dict[str, List[Tuple[str, str, List[str]]]]
