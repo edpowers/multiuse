@@ -1,5 +1,6 @@
 """Parquet IO."""
 
+import json
 import logging
 from pathlib import Path
 from typing import Union
@@ -69,6 +70,7 @@ class ParquetIO:
     @staticmethod
     def read_parquet(
         fpath: Path,
+        convert_from_json: bool = False,
         return_empty_if_error_or_missing: bool = False,
         columns_for_fake_df: list = [],
     ) -> pd.DataFrame:
@@ -86,16 +88,21 @@ class ParquetIO:
             If True, return an empty dataframe if the file is missing.
 
         """
+        df_to_return = pd.DataFrame()
+
         try:
-            return pd.read_parquet(fpath)
+            df_to_return = pd.read_parquet(fpath)
         except (pyarrow.lib.ArrowIOError, pyarrow.ArrowInvalid, OSError) as aie:
             logging.error(f"ArrowIOError: removing corrupted fpath - {aie}")
             fpath.unlink(missing_ok=True)
 
         if return_empty_if_error_or_missing:
-            return pd.DataFrame(columns=columns_for_fake_df)
+            df_to_return = pd.DataFrame(columns=columns_for_fake_df)
 
-        raise FileNotFoundError(f"Failed to read in {fpath=}")
+        if convert_from_json and not df_to_return.empty:
+            df_to_return = convert_from_json_to_dict(df_to_return)
+
+        return df_to_return
 
     def _concatenate_and_drop_duplicates(
         self, df_old: pd.DataFrame, df_new: pd.DataFrame
@@ -114,3 +121,29 @@ class ParquetIO:
             raise FileNotFoundError(f"Failed to write to {fpath=}")
 
         logging.info(f"Successfully wrote to {fpath=}")
+
+
+def load_from_json(x: Union[str, int, float]) -> Union[dict, str, int, float]:
+    """Load from json."""
+    if not isinstance(x, str):
+        return x
+
+    if "{" not in x and "}" not in x:
+        return x
+    try:
+        return json.loads(x)
+    except json.JSONDecodeError:
+        return x
+
+
+def convert_from_json_to_dict(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert any columns that are json to dict."""
+    for col in df.columns:
+        if hasattr(df[col], "str"):
+            # If the column contains {} then convert to json.
+            if df[col].str.contains(r"{").any():
+                df[col] = df[col].apply(lambda x: load_from_json(x))
+        elif df[col].dtype == "object":
+            df[col] = df[col].astype(str).apply(lambda x: load_from_json(x))
+
+    return df
