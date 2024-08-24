@@ -2,40 +2,80 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 
 from dotenv import find_dotenv, load_dotenv
 
 
 class FindProjectRoot:
+    """Class for reliably finding the project root."""
+
     @classmethod
     def find_project_root(
         cls,
         start_path: str = "",
         debug: bool = False,
         raise_error_if_no_env_file: bool = False,
-    ) -> Path:
+    ) -> Optional[Path]:
+        """
+        Find the project root directory.
+
+        This function looks for common project root indicators like .git, pyproject.toml,
+        or a custom .project_root file. It first checks for an environment variable,
+        then searches for indicators if the variable is not set.
+
+        Args:
+            start_path (str): The directory to start searching from. Defaults to the current working directory.
+            debug (bool): If True, print debug information.
+            raise_error_if_no_env_file (bool): If True, raise an error if no .env file is found.
+
+        Returns:
+            Path: The path to the project root directory.
+
+        Raises:
+            FileNotFoundError: If the project root cannot be found.
+        """
+        cls._load_environment(raise_error_if_no_env_file)
+
+        if project_root := cls._get_project_root_from_env():
+            return project_root
+
         instance = cls()
-
-        # Load the env vars for MULTIUSE_PROJECT_ROOT
-        load_dotenv(find_dotenv(raise_error_if_not_found=raise_error_if_no_env_file))
-        # IF there's an env var set, use that
-        if os.environ.get("MULTIUSE_PROJECT_ROOT"):
-            return Path(os.environ.get("MULTIUSE_PROJECT_ROOT", ""))
-
-        # Usage example
         try:
             project_root = instance._find_project_root(start_path)
-            if debug:
-                if instance._verify_project_root(project_root):
-                    print(f"Project root found at: {project_root}")
-                else:
-                    print(
-                        f"Found path {project_root}, but it may not be a valid project root."
-                    )
+            cls._handle_debug_output(debug, instance, project_root)
             return project_root
         except FileNotFoundError as e:
-            print(f"Error: {e}")
-            raise e
+            cls._handle_error(e)
+
+        return None
+
+    @staticmethod
+    def _load_environment(raise_error_if_no_env_file: bool) -> None:
+        load_dotenv(find_dotenv(raise_error_if_not_found=raise_error_if_no_env_file))
+
+    @staticmethod
+    def _get_project_root_from_env() -> Optional[Path]:
+        if project_root := os.environ.get("MULTIUSE_PROJECT_ROOT"):
+            return Path(project_root)
+        return None
+
+    @classmethod
+    def _handle_debug_output(
+        cls, debug: bool, instance: "FindProjectRoot", project_root: Path
+    ) -> None:
+        if debug:
+            if instance._verify_project_root(project_root):
+                print(f"Project root found at: {project_root}")
+            else:
+                print(
+                    f"Found path {project_root}, but it may not be a valid project root."
+                )
+
+    @staticmethod
+    def _handle_error(error: Exception) -> None:
+        print(f"Error: {error}")
+        raise error
 
     def _find_project_root(self, start_path: str = "") -> Path:
         """

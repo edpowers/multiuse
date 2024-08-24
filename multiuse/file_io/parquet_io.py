@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 
 import pandas as pd
 import pyarrow
@@ -26,7 +26,11 @@ class ParquetIO:
 
     @classmethod
     def write_to_parquet(
-        cls, df: pd.DataFrame, fpath: Path, return_combined_df: bool = False
+        cls,
+        df: pd.DataFrame,
+        fpath: Path,
+        convert_to_json: bool = False,
+        return_combined_df: bool = False,
     ) -> Union[None, pd.DataFrame]:
         """Write to the parquet file specified.
 
@@ -35,7 +39,10 @@ class ParquetIO:
         """
         instance = cls()
         final = instance._write_to_parquet(
-            df, fpath, return_combined_df=return_combined_df
+            df,
+            fpath,
+            convert_to_json=convert_to_json,
+            return_combined_df=return_combined_df,
         )
 
         if return_combined_df and isinstance(final, pd.DataFrame):
@@ -44,12 +51,19 @@ class ParquetIO:
         return None
 
     def _write_to_parquet(
-        self, df: pd.DataFrame, fpath: Path, return_combined_df: bool = False
+        self,
+        df: pd.DataFrame,
+        fpath: Path,
+        convert_to_json: bool = False,
+        return_combined_df: bool = False,
     ) -> Union[None, pd.DataFrame]:
         """Write the dataframe to parquet."""
         # Make the corresponding directory if it does not exist.
         # and set the write permissions for access.
         self._create_parent_struct_make_file_permissions(fpath)
+
+        if convert_to_json:
+            df = convert_dict_columns_to_json(df)
 
         # If the old fpath exists, read it and concatenate the new df.
         if fpath.exists():
@@ -136,6 +150,34 @@ def load_from_json(x: Union[str, int, float]) -> Union[dict, str, int, float]:
         return x
 
 
+def convert_to_json(x: Any) -> Union[str, int, float]:
+    """Convert various data types to JSON-compatible format."""
+    if isinstance(x, (str, int, float)):
+        return x
+
+    if isinstance(x, (dict, list)):
+        try:
+            return json.dumps(x, default=str)
+        except TypeError:
+            pass
+
+    # Handle other types
+    try:
+        # Try to convert to dict first (for custom objects)
+        return json.dumps(vars(x), default=str)
+    except TypeError:
+        # If that fails, convert to string
+        return str(x)
+
+    # Handle other types
+    try:
+        # Try to convert to dict first (for custom objects)
+        return json.dumps(vars(x), default=str)
+    except TypeError:
+        # If that fails, convert to string
+        return str(x)
+
+
 def convert_from_json_to_dict(df: pd.DataFrame) -> pd.DataFrame:
     """Convert any columns that are json to dict."""
     for col in df.columns:
@@ -145,5 +187,18 @@ def convert_from_json_to_dict(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = df[col].apply(lambda x: load_from_json(x))
         elif df[col].dtype == "object":
             df[col] = df[col].astype(str).apply(lambda x: load_from_json(x))
+
+    return df
+
+
+def convert_dict_columns_to_json(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert any columns that are dicts to json."""
+    df = df.copy()
+
+    for col in df.columns:
+        # if trustradius_all[col]
+        # if any of the rows are a dict, then convert to json.
+        if df[col].apply(lambda x: isinstance(x, dict)).any():
+            df[col] = df[col].apply(lambda x: convert_to_json(x))
 
     return df

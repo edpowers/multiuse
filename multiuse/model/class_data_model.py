@@ -114,20 +114,35 @@ class ClassDataModelFactory:
         self, class_info: Dict[str, List[Tuple[str, str, List[str]]]]
     ) -> List[ClassDataModel]:
         class_data_models = []
+        logging.info(f"Starting create_from_class_info with {len(class_info)} classes")
 
         for file_path, classes in class_info.items():
             for class_name, import_path, function_names in classes:
-                print(f"Generating code for class: {class_name} from {file_path}")
+                logging.info(f"Processing class: {class_name} from {file_path}")
 
                 try:
                     class_to_process = self._import_class(import_path)
+                    logging.info(f"Successfully imported class: {class_name}")
 
                     # Get the absolute path of the function's module
                     module_path = Path(
                         SystemUtils.get_class_file_path(class_to_process)
                     )
-                    # Create the relative path from the project root
-                    relative_path = module_path.relative_to(self.project_root)
+                    logging.info(f"Module path: {module_path}")
+                    logging.info(f"Project root: {self.project_root}")
+
+                    # Check if the module_path is within the project_root
+                    try:
+                        relative_path = module_path.relative_to(self.project_root)
+                        logging.info(f"Relative path: {relative_path}")
+                    except ValueError as e:
+                        logging.error(f"Error creating relative path: {str(e)}")
+                        print(
+                            f"Error processing class {class_name}: '{module_path}' "
+                            f" is not in the subpath of '{self.project_root}' "
+                            "OR one path is relative and the other is absolute."
+                        )
+                        continue
 
                     generated_log_path = (
                         self.project_root.joinpath("generated_code_logs")
@@ -171,11 +186,16 @@ class ClassDataModelFactory:
                     )
 
                     class_data_models.append(class_model)
+                    logging.info(f"Successfully added class model for {class_name}")
 
                 except Exception as e:
+                    logging.error(f"Error processing class {class_name}: {str(e)}")
                     print(f"Error processing class {class_name}: {str(e)}")
 
         self.class_data_models = class_data_models
+        logging.info(
+            f"Finished create_from_class_info, created {len(class_data_models)} models"
+        )
 
         return class_data_models
 
