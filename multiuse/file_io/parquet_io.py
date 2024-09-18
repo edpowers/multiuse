@@ -31,6 +31,7 @@ class ParquetIO:
         fpath: Path,
         convert_to_json: bool = False,
         return_combined_df: bool = False,
+        overwrite: bool = False,
     ) -> Union[None, pd.DataFrame]:
         """Write to the parquet file specified.
 
@@ -43,6 +44,7 @@ class ParquetIO:
             fpath,
             convert_to_json=convert_to_json,
             return_combined_df=return_combined_df,
+            overwrite=overwrite,
         )
 
         if return_combined_df and isinstance(final, pd.DataFrame):
@@ -56,19 +58,28 @@ class ParquetIO:
         fpath: Path,
         convert_to_json: bool = False,
         return_combined_df: bool = False,
+        overwrite: bool = False,
     ) -> Union[None, pd.DataFrame]:
         """Write the dataframe to parquet."""
         # Make the corresponding directory if it does not exist.
         # and set the write permissions for access.
         self._create_parent_struct_make_file_permissions(fpath)
 
+        # Convert categorical columns to string
+        df = self._convert_categorical_to_string(df)
+        # Drop duplicated columns
+        df = self.drop_duplicated_columns(df)
+
         if convert_to_json:
             df = convert_dict_columns_to_json(df)
 
         # If the old fpath exists, read it and concatenate the new df.
-        if fpath.exists():
+        if fpath.exists() and not overwrite:
             df_old = self.read_parquet(fpath, return_empty_if_error_or_missing=True)
             df = self._concatenate_and_drop_duplicates(df_old, df)
+        elif fpath.exists() and overwrite:
+            # Then remove the file.
+            fpath.unlink(missing_ok=True)
 
         df.to_parquet(fpath)
 
@@ -76,10 +87,34 @@ class ParquetIO:
 
         return df if return_combined_df else None
 
+    def _convert_categorical_to_string(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert categorical columns to string type.
+
+        This is mainly because pyarrow doesn't understand categorical types.
+        And when we read back in, it will throw an error.
+        """
+        for col in df.select_dtypes(include=["category"]).columns:
+            df[col] = df[col].astype(str)
+        return df
+
     def _create_parent_struct_make_file_permissions(self, fpath: Path) -> None:
         """Create the parent directory structure and set the file permissions."""
         if not fpath.exists():
             fpath.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+
+    def drop_duplicated_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Drop duplicated columns from the DataFrame.
+
+        This function keeps the first occurrence of each duplicated column
+        and removes subsequent occurrences.
+
+        Args:
+            df (pd.DataFrame): Input DataFrame
+
+        Returns:
+            pd.DataFrame: DataFrame with duplicated columns removed
+        """
+        return df.loc[:, ~df.columns.duplicated()]
 
     @staticmethod
     def read_parquet(

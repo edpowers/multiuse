@@ -8,8 +8,11 @@
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always"
     },
-    "files.exclude": {
+    "files.exclude": { // Exclude from the file explorer
         "**/.mypy_cache": true,
         "**/__pycache__": true,
-    }
+        "**/.pytest_cache": true,
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.envFile": "${workspaceFolder}/.env",
 }

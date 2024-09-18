@@ -319,7 +319,7 @@ def query_columns_by_search_terms(
     columns: list[str],
     search_terms: list[str],
     case_sensitive: bool = False,
-) -> dict[str, pl.DataFrame]:
+) -> pl.DataFrame:
     """
     Query the CSV file to find rows where the specified columns contain any of the search terms.
 
