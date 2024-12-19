@@ -1,6 +1,7 @@
 import csv
 import gzip
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -316,9 +317,10 @@ def query_column_by_search_terms(
 
 def query_columns_by_search_terms(
     file_path: Path,
-    columns: list[str],
     search_terms: list[str],
+    columns: Optional[list[str]] = None,
     case_sensitive: bool = False,
+    escaped_terms: bool = False,
 ) -> pl.DataFrame:
     """
     Query the CSV file to find rows where the specified columns contain any of the search terms.
@@ -332,27 +334,36 @@ def query_columns_by_search_terms(
     Returns:
     dict[str, pl.DataFrame]: Dictionary with column names as keys and filtered DataFrames as values
     """
+    if columns is None:
+        columns = ["SEC_PARTY", "COLLATERAL"]
+
     # Specify dtypes for columns
     dtypes = {col: pl.Utf8 for col in columns}
 
-    # Combine search terms into a single regex pattern
-    combined_pattern = "|".join(search_terms)
+    if escaped_terms:
+        # Escape special regex characters in search terms
+        search_terms = [re.escape(term) for term in search_terms]
+
+    if case_sensitive:
+        combined_pattern = "|".join(
+            f"(^|\\s){re.escape(term)}" for term in search_terms
+        )
+    else:
+        combined_pattern = "(?i)" + "|".join(
+            f"(^|\\s){re.escape(term)}" for term in search_terms
+        )
 
     scan = pl.scan_csv(
         file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
     )
 
-    # Build the filter expression for all specified columns
-    filter_expr = pl.lit(False)
-    for column in columns:
-        if case_sensitive:
-            filter_expr |= pl.col(column).str.contains(combined_pattern, literal=False)
-        else:
-            filter_expr |= (
-                pl.col(column)
-                .str.to_lowercase()
-                .str.contains(combined_pattern.lower(), literal=False)
-            )
+    # Build the filter expression for the single column
+    filter_expr = pl.col("COLLATERAL").str.contains(
+        combined_pattern,
+        literal=False,
+    )
+
+    print(f"Filter expression: {filter_expr}")
 
     # Apply the filter and collect results
     result = scan.filter(filter_expr).collect()
@@ -361,6 +372,8 @@ def query_columns_by_search_terms(
     result = result.unique()
 
     print(f"Total rows found (after deduplication): {len(result)}")
+
+    assert isinstance(result, pl.DataFrame)
 
     return result
 
@@ -416,18 +429,62 @@ def query_columns_by_coordinate_pairs(
     return result
 
 
-def write_results_to_csv(results: pl.DataFrame, output_path: Path) -> None:
+def write_lazy_results_to_csv(
+    results: pl.LazyFrame,
+    output_path: Path,
+    print_results: bool = True,
+    overwrite: bool = True,
+) -> None:
+    """
+    Write the query results to a CSV file.
+
+    Args:
+    results (pl.LazyFrame): The LazyFrame containing the query results
+    output_path (Path): The path where the CSV file should be saved
+    print_results (bool, default = True): Whether to print the results
+    write_if_empty (bool, default = False): Whether to write the results if they are empty
+    """
+    # length_of_results = results.select(pl.len()).collect().item()
+    # if not write_if_empty and length_of_results == 0:
+    #     return
+
+    if not output_path.parent.exists():
+        output_path.parent.mkdir(parents=True, exist_ok=True, mode=0o777)
+
+    if overwrite and output_path.exists():
+        output_path.unlink()
+
+    results.sink_csv(output_path)
+
+    if print_results:
+        print(f"Results written to {output_path}")
+
+
+def write_results_to_csv(
+    results: pl.DataFrame,
+    output_path: Path,
+    print_results: bool = True,
+    write_if_empty: bool = False,
+) -> None:
     """
     Write the query results to a CSV file.
 
     Args:
     results (pl.DataFrame): The DataFrame containing the query results
     output_path (Path): The path where the CSV file should be saved
+    print_results (bool, default = True): Whether to print the results
+    write_if_empty (bool, default = False): Whether to write the results if they are empty
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not write_if_empty and len(results) == 0:
+        return
+
+    if not output_path.parent.exists():
+        output_path.parent.mkdir(parents=True, exist_ok=True, mode=0o777)
 
     results.write_csv(output_path)
-    print(f"Results written to {output_path}: {len(results)} rows")
+
+    if print_results:
+        print(f"Results written to {output_path}: {len(results)} rows")
 
 
 def get_value_counts_lazy(csv_path: Path, column_name: str) -> pl.DataFrame:
@@ -577,3 +634,204 @@ def add_associated_names(
     result = result.drop(["temp_associated_names", "associated_names_filled"])
 
     return result.collect()
+
+
+def query_by_year_range(
+    file_path: Path,
+    start_year: int,
+    end_year: int,
+    date_column: str = "UCC_FILING_DATE",
+) -> pl.DataFrame:
+    """
+    Query the CSV file to find rows where the date column falls within the specified year range.
+
+    Args:
+    file_path (Path): Path to the CSV file
+    start_year (int): Start year of the range (inclusive)
+    end_year (int): End year of the range (inclusive)
+    date_column (str): Name of the column containing the date (default: "UCC_FILING_DATE")
+
+    Returns:
+    pl.DataFrame: Filtered DataFrame containing rows within the specified year range
+    """
+    # Specify dtype for the date column
+    dtypes = {date_column: pl.Utf8}
+
+    scan = pl.scan_csv(
+        file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
+    )
+
+    # Build the filter expression for the year range
+    filter_expr = (
+        pl.col(date_column)
+        .str.strptime(pl.Date, "%Y-%m-%d")
+        .dt.year()
+        .is_between(start_year, end_year)
+    )
+
+    # Apply the filter and collect results
+    result = scan.filter(filter_expr).collect()
+
+    print(f"Total rows found: {len(result)}")
+
+    return result
+
+
+EXCLUDED_SEARCH_TERMS = [
+    "MARINE",
+    "MERCURY",
+    "SKIFF",
+    "OIL",
+    "TRAILER",
+    "BOAT",
+    "HULL",
+    "BIMBOX STRYKER",
+    "STRYKER LOGISTICS",
+    "TREADMILL",
+    "TRUE FITNESS",
+    "PARCEL",
+    "ALUMAWELD",
+    "YAMAHA",
+    "KUBOTA",
+    "SUZUKI",
+    "FIBERGLASS",
+    "HONDA",
+    "CARHAULER",
+    "MOTOR",
+    "Aqua Finance",
+    "Cg Automation And Fixture",
+    "CHOPPER",
+    "SNOWPLOW",
+    "TAHOE",
+    "DEFENDER",
+    "STRYKER-MUNLEY",
+    "VIN#",
+    "VIN/",
+    "SENIOR HOUSING",
+    "STRYKER STREET",
+    "Farm Bureau Bank FSB",
+    "KAWASAKI",
+    "SUZUKI",
+    "HONDA",
+    "ARTICAT",
+    "KUBOTA",
+    "YAMAHA",
+    "POLARIS",
+    "Tobacco",
+    "MOWER",
+    "WHEELER",
+    "BOBCATLOADER",
+    "LEEBOY",
+    "TRAILER",
+    "FORKLIFT",
+    "VEHICLE",
+    "PNEUMATIC",
+    "NOMAD DONUTS",
+    "Envista Credit Union",
+    "Envista CU",
+    "NOMAD GROUP",
+    "Envista Federal",
+    "REAL ESTATE",
+    "Envista Federal Credit Union",
+    "CAMPER",
+    " VIN ",
+    " VIN#",
+    " V1N ",
+    "SURVEY PRO",
+    "FIBERGLASS",
+]
+
+
+def process_search_phrase(
+    phrase: Optional[Union[str, list[str]]],
+    exclude: bool = False,
+    use_default_exclude: bool = True,
+) -> str:
+    """
+    Process search phrase(s) to create a properly formatted regex pattern.
+
+    Args:
+        phrase (Optional[Union[str, list[str]]]): Input phrase or list of phrases
+        exclude (bool): Whether this is for exclusion. Defaults to False.
+        use_default_exclude (bool): Whether to use default exclusion terms. Defaults to True.
+
+    Returns:
+        str: Processed regex pattern
+    """
+    global EXCLUDED_SEARCH_TERMS
+    DEFAULT_EXCLUDE_PHRASE = "(?i)PLAYSTATION|mower|DVD|WEEDEATER|SHOTGUN|FLATSCREEN|FLAT SCREEN|HAND GUN|9MM|9NUN"
+
+    if exclude and use_default_exclude and isinstance(phrase, str):
+        if phrase == "":
+            return DEFAULT_EXCLUDE_PHRASE + "|".join(EXCLUDED_SEARCH_TERMS)
+        else:
+            # Skip the (?i) in DEFAULT_EXCLUDE_PHRASE
+            return f"(?i){phrase}|{EXCLUDED_SEARCH_TERMS[4:]}"
+
+    if isinstance(phrase, list) and all(isinstance(p, str) for p in phrase):
+        return f"(?i){'| '.join(phrase)}"
+
+    if isinstance(phrase, str) and phrase:
+        return f"(?i){phrase}"
+
+    return phrase or DEFAULT_EXCLUDE_PHRASE + "|".join(EXCLUDED_SEARCH_TERMS)
+
+
+def find_rows_with_phrase_df(
+    df: Union[pl.DataFrame, pl.LazyFrame],
+    columns: Optional[list[str]] = None,
+    phrase: Optional[Union[str, list[str]]] = "",
+    exclude: bool = False,
+    use_default_exclude: bool = True,
+    collect: bool = True,
+) -> Union[pl.DataFrame, pl.LazyFrame]:
+    """
+    Find rows in specified columns that contain or don't contain the given phrase.
+    Works with both eager and lazy DataFrames and reports exclusion statistics.
+
+    Args:
+        df (Union[pl.DataFrame, pl.LazyFrame]): Input DataFrame
+        columns (Optional[list[str]], optional): Columns to search in. Defaults to None.
+        phrase (Optional[Union[str, list[str]]], optional): Phrase(s) to search for. Defaults to "".
+        exclude (bool, optional): Whether to exclude matches. Defaults to False.
+        use_default_exclude (bool, optional): Whether to use default exclusion terms. Defaults to True.
+        collect (bool, optional): Whether to collect results or return LazyFrame. Defaults to True.
+
+    Returns:
+        Union[pl.DataFrame, pl.LazyFrame]: Filtered DataFrame or LazyFrame
+    """
+    # Convert to LazyFrame if not already
+    lf = df.lazy() if isinstance(df, pl.DataFrame) else df
+
+    # Store initial count for comparison
+    initial_count = lf.select(pl.count()).collect().item()
+
+    # Process the search phrase
+    processed_phrase = process_search_phrase(phrase, exclude, use_default_exclude)
+
+    if not columns:
+        columns = ["COLLATERAL", "SEC_PARTY"]
+
+    # Create expressions for each column
+    exprs = [pl.col(col).str.contains(processed_phrase) for col in columns]
+
+    # Combine expressions using OR
+    combined_expr = pl.any_horizontal(exprs)
+
+    # Apply exclusion if needed
+    if exclude:
+        combined_expr = ~combined_expr
+
+    # Apply filter
+    result = lf.filter(combined_expr)
+
+    # Get final count and calculate excluded rows
+    final_count = result.select(pl.count()).collect().item()
+    excluded_count = initial_count - final_count
+
+    if excluded_count > 0:
+        print(
+            f"Excluded {excluded_count:,} rows ({(excluded_count/initial_count)*100:.2f}% of total)"
+        )
+
+    return result.collect() if collect else result

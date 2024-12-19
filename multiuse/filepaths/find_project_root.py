@@ -16,6 +16,7 @@ class FindProjectRoot:
         start_path: str = "",
         debug: bool = False,
         raise_error_if_no_env_file: bool = False,
+        raise_if_not_path: bool = False,
     ) -> Optional[Path]:
         """
         Find the project root directory.
@@ -38,15 +39,22 @@ class FindProjectRoot:
         cls._load_environment(raise_error_if_no_env_file)
 
         if project_root := cls._get_project_root_from_env():
+            if not isinstance(project_root, Path):
+                raise ValueError("Project root is not a valid Path object.")
             return project_root
 
         instance = cls()
         try:
             project_root = instance._find_project_root(start_path)
             cls._handle_debug_output(debug, instance, project_root)
+            if not isinstance(project_root, Path):
+                raise ValueError("Project root is not a valid Path object.")
             return project_root
         except FileNotFoundError as e:
             cls._handle_error(e)
+
+        if raise_if_not_path:
+            raise FileNotFoundError("Project root not found.")
 
         return None
 
