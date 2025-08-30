@@ -2,15 +2,67 @@ import csv
 import gzip
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 import chardet
 import numpy as np
 import polars as pl
+from joblib import Parallel, delayed
+from tqdm.auto import tqdm
 
 
-def get_csv_metadata(file_path: Path) -> Dict[str, Any]:
+def count_search_term_occurrences(
+    df: pl.DataFrame | pl.LazyFrame,
+    search_terms: list[str],
+    columns_to_search: list[str],
+) -> pl.DataFrame:
+    """Count occurrences of each search term in specified columns.
+
+    Args:
+        df: Input DataFrame or LazyFrame
+        search_terms: List of search terms to count
+        columns_to_search: List of column names to search within
+
+    Returns:
+        DataFrame with search terms and their counts
+    """
+    # Convert to LazyFrame if DataFrame
+    lazy_df = df.lazy() if isinstance(df, pl.DataFrame) else df
+
+    # Create expressions for counting each search term in each column
+    count_exprs = []
+    for term in search_terms:
+        # Sum the counts across all specified columns for each term
+        term_counts = sum(
+            [
+                pl.col(col).str.count_matches(term).alias(f"{term}_{col}")
+                for col in columns_to_search
+            ]
+        )
+        count_exprs.append(term_counts.alias(f"count_{term}"))
+
+    # Calculate all counts in one pass
+    counts_df = lazy_df.select(count_exprs).sum().collect()
+
+    # Reshape to long format for better visualization
+    result_df = (
+        counts_df.melt()
+        .with_columns(
+            [
+                pl.col("variable").str.replace("count_", "").alias("search_term"),
+                pl.col("value").alias("count"),
+            ]
+        )
+        .select(["search_term", "count"])
+        .sort("count", descending=True)
+    )
+
+    return result_df
+
+
+def get_csv_metadata(file_path: Path) -> dict[str, Any]:
     """
     Get metadata about the CSV file without reading it entirely into memory.
 
@@ -49,7 +101,7 @@ def is_numeric_dtype(dtype: pl.DataType) -> bool:
     ]
 
 
-def get_column_stats(file_path: Path, column_name: str) -> Dict[str, Any]:
+def get_column_stats(file_path: Path, column_name: str) -> dict[str, Any]:
     """
     Get basic statistics for a specific column in the CSV file.
 
@@ -200,7 +252,7 @@ def preprocess_large_csv(
 
 
 def scan_csv_path(
-    file_path: Path, columns_dtypes: Dict[str, pl.DataType]
+    file_path: Path, columns_dtypes: dict[str, pl.DataType]
 ) -> pl.DataFrame:
     """
     Scan a CSV file and return a lazy DataFrame.
@@ -221,8 +273,8 @@ def scan_csv_path(
 
 def query_columns_with_exact_and_fuzzy(
     file_path: Path,
-    exact_match: Optional[Dict[str, List[Union[str, int]]]] = None,
-    fuzzy_match: Optional[Dict[str, List[str]]] = None,
+    exact_match: dict[str, list[str | int]] | None = None,
+    fuzzy_match: dict[str, list[str]] | None = None,
 ) -> pl.DataFrame:
     """
     Query the CSV file to find rows that match both exact and fuzzy criteria, optimized for large files.
@@ -253,7 +305,7 @@ def query_columns_with_exact_and_fuzzy(
     )
 
     # Specify dtypes for columns
-    dtypes = {col: pl.Utf8 for col in columns_to_read}
+    dtypes = dict.fromkeys(columns_to_read, pl.Utf8)
 
     # Create scan object
     scan = pl.scan_csv(
@@ -318,7 +370,7 @@ def query_column_by_search_terms(
 def query_columns_by_search_terms(
     file_path: Path,
     search_terms: list[str],
-    columns: Optional[list[str]] = None,
+    columns: list[str] | None = None,
     case_sensitive: bool = False,
     escaped_terms: bool = False,
 ) -> pl.DataFrame:
@@ -338,7 +390,7 @@ def query_columns_by_search_terms(
         columns = ["SEC_PARTY", "COLLATERAL"]
 
     # Specify dtypes for columns
-    dtypes = {col: pl.Utf8 for col in columns}
+    dtypes = dict.fromkeys(columns, pl.Utf8)
 
     if escaped_terms:
         # Escape special regex characters in search terms
@@ -402,7 +454,7 @@ def query_columns_by_coordinate_pairs(
         )
 
     # Specify dtypes for columns
-    dtypes = {col: pl.Float64 for col in columns}
+    dtypes = dict.fromkeys(columns, pl.Float64)
 
     scan = pl.scan_csv(
         file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
@@ -460,6 +512,49 @@ def write_lazy_results_to_csv(
         print(f"Results written to {output_path}")
 
 
+def format_search_string(
+    search_string: str | list[str],
+    convert_to_lowercase: bool = False,
+    use_regex: bool = True,
+) -> str:
+    # If search_string is already formatted or contains regex patterns, return as is
+    if isinstance(search_string, str) and (
+        "\\" in search_string or any(c in search_string for c in ".*+?{}[]()^$|")
+    ):
+        return search_string
+
+    if convert_to_lowercase:
+        search_string = [name.lower() for name in search_string]
+
+    if len(search_string) <= 1:
+        regex_search = f"(^|\\b|\\s| )({search_string})(\\b|\\s|$| )"
+    elif len(search_string) > 1:
+        regex_search = []
+        for name in search_string:
+            # Only clean and escape if the string doesn't contain regex patterns
+            if not use_regex or not any(c in name for c in ".*+?{}[]()^$|"):
+                # Clean and escape special characters
+                cleaned_name = (
+                    name.replace(")", "")
+                    .replace("(", "")
+                    .replace("[", "")
+                    .replace("]", "")
+                    .replace("*", "")
+                )
+                # Escape special regex characters
+                escaped_name = re.escape(cleaned_name)
+                regex_search.append(escaped_name)
+            else:
+                # Keep regex patterns as is
+                regex_search.append(name)
+
+        # Add boundary conditions once for the entire pattern
+        regex_search = f"(^|\\b|\\s| )({'|'.join(regex_search)})(\\b|\\s|$| )"
+
+    return regex_search
+
+
+
 def write_results_to_csv(
     results: pl.DataFrame,
     output_path: Path,
@@ -485,6 +580,33 @@ def write_results_to_csv(
 
     if print_results:
         print(f"Results written to {output_path}: {len(results)} rows")
+
+
+def write_results_to_parquet(
+    results: pl.DataFrame,
+    output_path: Path,
+    print_results: bool = True,
+    write_if_empty: bool = False,
+) -> None:
+    """
+    Write the query results to a CSV file.
+
+    Args:
+    results (pl.DataFrame): The DataFrame containing the query results
+    output_path (Path): The path where the CSV file should be saved
+    print_results (bool, default = True): Whether to print the results
+    write_if_empty (bool, default = False): Whether to write the results if they are empty
+    """
+    if not write_if_empty and len(results) == 0:
+        return
+
+    if not output_path.parent.exists():
+        output_path.parent.mkdir(parents=True, exist_ok=True, mode=0o777)
+
+    results.write_parquet(output_path)
+
+    if print_results:
+        print(f"Results written to {output_path}: \n {len(results)} rows")
 
 
 def get_value_counts_lazy(csv_path: Path, column_name: str) -> pl.DataFrame:
@@ -519,7 +641,7 @@ def get_multi_column_value_counts_lazy(
     pl.DataFrame: A DataFrame containing the combined value counts for the specified columns
     """
     # Create a dictionary to store the schema for scan_csv
-    schema = {col: str for col in column_names}
+    schema = dict.fromkeys(column_names, str)
 
     # Scan the CSV file
     df = scan_csv_path(csv_path, schema)
@@ -603,7 +725,7 @@ def add_associated_names(
     pl.DataFrame: A DataFrame with the original counts and a new column of associated names as JSON
     """
     # Create a schema for the CSV scan
-    schema = {col: str for col in join_columns}
+    schema = dict.fromkeys(join_columns, str)
     schema[party_column] = str
 
     # Scan the CSV file
@@ -743,7 +865,7 @@ EXCLUDED_SEARCH_TERMS = [
 
 
 def process_search_phrase(
-    phrase: Optional[Union[str, list[str]]],
+    phrase: str | list[str] | None,
     exclude: bool = False,
     use_default_exclude: bool = True,
 ) -> str:
@@ -764,9 +886,8 @@ def process_search_phrase(
     if exclude and use_default_exclude and isinstance(phrase, str):
         if phrase == "":
             return DEFAULT_EXCLUDE_PHRASE + "|".join(EXCLUDED_SEARCH_TERMS)
-        else:
-            # Skip the (?i) in DEFAULT_EXCLUDE_PHRASE
-            return f"(?i){phrase}|{EXCLUDED_SEARCH_TERMS[4:]}"
+        # Skip the (?i) in DEFAULT_EXCLUDE_PHRASE
+        return f"(?i){phrase}|{EXCLUDED_SEARCH_TERMS[4:]}"
 
     if isinstance(phrase, list) and all(isinstance(p, str) for p in phrase):
         return f"(?i){'| '.join(phrase)}"
@@ -778,60 +899,370 @@ def process_search_phrase(
 
 
 def find_rows_with_phrase_df(
-    df: Union[pl.DataFrame, pl.LazyFrame],
-    columns: Optional[list[str]] = None,
-    phrase: Optional[Union[str, list[str]]] = "",
+    df: pl.DataFrame | pl.LazyFrame,
+    columns: list[str] | None = None,
+    phrase: str | list[str] | None = "",
     exclude: bool = False,
-    use_default_exclude: bool = True,
-    collect: bool = True,
-) -> Union[pl.DataFrame, pl.LazyFrame]:
-    """
-    Find rows in specified columns that contain or don't contain the given phrase.
-    Works with both eager and lazy DataFrames and reports exclusion statistics.
+    case_sensitive: bool = False,
+    use_regex: bool = True,
+    debug: bool = False,
+) -> pl.DataFrame | pl.LazyFrame:
+    if exclude and not phrase:
+        # This isn't necessarily a warning since sometimes we wouldn't have
+        # any exclude terms, but can chain the methods together for convenience.
+        if debug:
+            print(
+                "Returning original without exclusion since no exclude terms provided."
+            )
+        return df
 
-    Args:
-        df (Union[pl.DataFrame, pl.LazyFrame]): Input DataFrame
-        columns (Optional[list[str]], optional): Columns to search in. Defaults to None.
-        phrase (Optional[Union[str, list[str]]], optional): Phrase(s) to search for. Defaults to "".
-        exclude (bool, optional): Whether to exclude matches. Defaults to False.
-        use_default_exclude (bool, optional): Whether to use default exclusion terms. Defaults to True.
-        collect (bool, optional): Whether to collect results or return LazyFrame. Defaults to True.
+    if isinstance(df, pl.LazyFrame):
+        # Store initial count for comparison
+        initial_count = df.select(pl.count()).collect().item()
+    else:
+        initial_count = df.height
 
-    Returns:
-        Union[pl.DataFrame, pl.LazyFrame]: Filtered DataFrame or LazyFrame
-    """
     # Convert to LazyFrame if not already
     lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
-    # Store initial count for comparison
-    initial_count = lf.select(pl.count()).collect().item()
+    # Validate columns exist
+    if not columns:
+        columns = ["COLLATERAL"]
+
+    if exclude and not phrase:
+        if debug:
+            print(
+                "Returning original without exclusion since no exclude terms provided."
+            )
+        return df
 
     # Process the search phrase
-    processed_phrase = process_search_phrase(phrase, exclude, use_default_exclude)
+    # processed_phrase = process_search_phrase(phrase, exclude, use_default_exclude)
+    processed_phrase = format_search_string(
+        phrase, convert_to_lowercase=not case_sensitive
+    )
 
-    if not columns:
-        columns = ["COLLATERAL", "SEC_PARTY"]
+    result = lf
 
-    # Create expressions for each column
-    exprs = [pl.col(col).str.contains(processed_phrase) for col in columns]
-
-    # Combine expressions using OR
-    combined_expr = pl.any_horizontal(exprs)
-
-    # Apply exclusion if needed
     if exclude:
-        combined_expr = ~combined_expr
+        included_results_test = lf
 
-    # Apply filter
-    result = lf.filter(combined_expr)
+        for column in columns:
+            included_results_test = included_results_test.filter(
+                ~pl.col(column).str.to_lowercase().str.contains(processed_phrase)
+            )
+
+        result = included_results_test.collect()
+    else:
+        rows_to_keep = []
+        # Keep rows that match the term in any column
+        for column in columns:
+            rows_to_keep.append(
+                pl.col(column).str.to_lowercase().str.contains(processed_phrase)
+            )
+        result = result.filter(pl.any_horizontal(rows_to_keep))
 
     # Get final count and calculate excluded rows
-    final_count = result.select(pl.count()).collect().item()
+    if isinstance(result, pl.LazyFrame):
+        final_count = result.select(pl.count()).collect().item()
+    else:
+        final_count = result.height
+
     excluded_count = initial_count - final_count
 
-    if excluded_count > 0:
+    if exclude and excluded_count > 0:
         print(
-            f"Excluded {excluded_count:,} rows ({(excluded_count/initial_count)*100:.2f}% of total)"
+            f"Excluded {excluded_count:,} rows "
+            f"({(excluded_count / initial_count) * 100:.2f}% of total)"
         )
 
-    return result.collect() if collect else result
+        # If everything was excluded.
+        if excluded_count == initial_count:
+            print("No rows were found after exclusion. Returning original.")
+            return df
+
+        print(
+            f"Excluded {excluded_count:,} rows "
+            f"({(excluded_count / initial_count) * 100:.2f}% of total)"
+        )
+
+    # Force garbage collection
+    if df is not None:
+        # Set to None to remove the reference
+        df = None
+        # Force garbage collection
+        import gc
+
+        gc.collect()
+
+    return result.collect() if isinstance(result, pl.LazyFrame) else result
+
+
+def align_schema(
+    df: pl.DataFrame, target_schema: dict, fill_missing_columns: bool = True
+) -> pl.DataFrame:
+    """
+    Align dataframe schema with target schema, including column order.
+
+    Args:
+        df: DataFrame to modify
+        target_schema: Target schema to match
+
+    Returns:
+        DataFrame with aligned schema and columns ordered according to target_schema
+    """
+    # First handle type conversions
+    for col_name, dtype in target_schema.items():
+        if col_name in df.columns:
+            # Handle specific type conversions
+            if dtype == pl.String and df[col_name].dtype == pl.Int64:
+                df = df.with_columns(pl.col(col_name).cast(pl.String))
+            elif dtype == pl.Int64 and df[col_name].dtype == pl.String:
+                df = df.with_columns(
+                    pl.col(col_name)
+                    .str.replace_all(r"^\s*$", "0")
+                    .cast(pl.Int64, strict=False)
+                )
+            elif dtype in (pl.Float64, pl.Float32) and df[col_name].dtype == pl.String:
+                df = df.with_columns(
+                    pl.col(col_name)
+                    .str.replace_all(r"^\s*$", "0.0")
+                    .cast(dtype, strict=False)
+                )
+            else:
+                df = df.with_columns(pl.col(col_name).cast(dtype))
+
+        elif fill_missing_columns:
+            df = df.with_columns(
+                pl.Series(name=col_name, values=[None] * len(df), dtype=dtype)
+            )
+
+    # Reorder columns to match target schema
+    # Only include columns that exist in the DataFrame
+    # Reorder columns to match target schema
+    # Only include columns that exist in the DataFrame
+    target_cols = [col for col in target_schema if col in df.columns]
+
+    return df.select(target_cols)
+
+
+def find_rows_with_phrase_from_fpath(
+    fpath: Path,
+    search_terms: list[str],
+    columns_to_search: list[str],
+    lazy: bool = True,
+    read_all_columns: bool = False,
+    additional_columns: list[str] | None = None,
+    use_regex: bool = True,
+) -> pl.DataFrame | pl.LazyFrame:
+    """
+    Find rows in a parquet file that contain any of the specified search terms.
+
+    Args:
+        fpath: Path to the parquet file
+        search_terms: List of terms to search for
+        columns_to_search: Columns to search in
+        lazy: If True, returns a LazyFrame; if False, returns a DataFrame
+
+    Returns:
+        A LazyFrame or DataFrame containing the matching rows
+    """
+    if read_all_columns:
+        scan_df = pl.scan_parquet(fpath, low_memory=True)
+    else:
+        scan_df = pl.scan_parquet(fpath, low_memory=True).select(
+            list(
+                set(
+                    columns_to_search
+                    + ["FILE_DATE", "ROW_INDEX"]
+                    + (additional_columns or [])
+                )
+            )
+        )
+
+    result = find_rows_with_phrase_df(
+        df=scan_df,
+        columns=columns_to_search,
+        phrase=search_terms,
+        use_regex=use_regex,
+    )
+
+    del scan_df
+
+    # Only collect if explicitly requested
+    if not lazy and hasattr(result, "collect"):
+        return result.collect()
+
+    return result
+
+
+def show_excluded_rows(
+    original_df: pl.DataFrame | pl.LazyFrame, filtered_df: pl.DataFrame | pl.LazyFrame
+) -> pl.DataFrame:
+    """
+    Shows the rows that were excluded during filtering.
+
+    Args:
+        original_df: The original LazyFrame before exclusion filtering
+        filtered_df: The LazyFrame after exclusion filtering
+
+    Returns:
+        DataFrame containing only the rows that were excluded
+    """
+    # Get unique identifiers from both dataframes
+    # Using anti_join to find rows in original_df that aren't in filtered_df
+    # We need to ensure we have a unique identifier for each row
+
+    # First collect both dataframes to compute the difference
+    # For large datasets, we might want a more memory-efficient approach
+    # but this is the most straightforward solution
+
+    if isinstance(original_df, pl.LazyFrame):
+        original_collected = original_df.collect()
+    else:
+        original_collected = original_df
+
+    if isinstance(filtered_df, pl.LazyFrame):
+        filtered_collected = filtered_df.collect()
+    else:
+        filtered_collected = filtered_df
+
+    # Find the rows that exist in original but not in filtered
+    # This assumes your dataframe has some columns that can uniquely identify each row
+    # If you don't have a natural primary key, you might need to create one
+
+    # Get all column names to use for comparison
+    all_columns = original_collected.columns
+
+    # Use anti_join to find rows in original that aren't in filtered
+    return original_collected.join(filtered_collected, on=all_columns, how="anti")
+
+
+def search_partitioned_parquet(
+    base_path: str | Path,
+    search_terms: list[str] | None = None,
+    columns_to_search: list[str] | None = None,
+    partition_by: str = "FILE_YEAR",
+    partition_values: list[int] | None = None,
+    exclude_terms: list[str] | None = None,
+    additional_columns: list[str] | None = None,
+    read_all_columns: bool = False,
+    lazy: bool = True,
+    n_jobs: int = -1,
+    target_schema: dict[str, pl.DataType] | None = None,
+    use_regex: bool = True,
+) -> pl.DataFrame | pl.LazyFrame:
+    """
+    Efficiently search through partitioned parquet files for specific terms.
+
+    This function optimizes for performance with large datasets by:
+    1. Only scanning required partitions
+    2. Using lazy evaluation and predicate pushdown
+    3. Only loading necessary columns
+    4. Applying filters at scan time when possible
+    5. Utilizing parallel processing with joblib
+
+    Args:
+        base_path: Path to the partitioned parquet directory
+        search_terms: List of terms to search for
+        columns_to_search: Columns to search within
+        partition_by: The column used for partitioning
+        partition_values: List of partition values to read. If None, reads all partitions.
+        exclude_terms: Optional list of terms to exclude from results
+        additional_columns: Additional columns to include in results beyond search columns
+        lazy: If True, returns a LazyFrame; if False, returns a DataFrame
+        n_jobs: Number of parallel jobs to run (-1 means using all processors)
+
+    Returns:
+        A LazyFrame or DataFrame containing the matching rows
+    """
+    from pathlib import Path
+
+    import polars as pl
+
+    base_path = Path(base_path)
+
+    # Determine columns to load
+    columns_to_load = list(set(columns_to_search + (additional_columns or [])))
+
+    # If no partition values specified, discover all available partitions
+    if partition_values is None:
+        partition_values = []
+        for path in base_path.glob(f"{partition_by}=*"):
+            if path.is_dir():
+                try:
+                    value = path.name.split("=")[1]
+                    # Try to convert to int if possible
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        pass
+                    partition_values.append(value)
+                except IndexError:
+                    continue
+
+    # Build paths for each partition to read
+    paths_to_read = []
+    for value in partition_values:
+        partition_dir = base_path / f"{partition_by}={value}"
+        if partition_dir.exists():
+            # Get all parquet files in this partition
+            parquet_files = list(partition_dir.rglob("*.parquet"))
+            paths_to_read.extend([str(p) for p in parquet_files])
+
+    if not paths_to_read:
+        raise ValueError(
+            f"No parquet files found for the specified partition values: {partition_values}"
+        )
+
+    # Process files in parallel
+    def process_file(path):
+        return find_rows_with_phrase_from_fpath(
+            fpath=path,
+            search_terms=search_terms,
+            columns_to_search=columns_to_search,
+            lazy=False,  # We need to collect for parallel processing
+            additional_columns=additional_columns,
+            read_all_columns=read_all_columns,
+            use_regex=use_regex,
+        )
+
+    # Use joblib for parallel processing
+    results_list_raw = Parallel(n_jobs=n_jobs)(
+        delayed(process_file)(path) for path in tqdm(paths_to_read)
+    )
+
+    # Make sure that the column orders is aligned.
+    if read_all_columns:
+        # Then look within the schemas of the results_list_raw and get the union of all columns
+        all_columns = {col for df in results_list_raw for col in df.columns}
+        target_schema = dict.fromkeys(all_columns, pl.Utf8)
+    else:
+        columns_to_load = list(set(columns_to_load + (additional_columns or [])))
+        target_schema = target_schema or dict.fromkeys(columns_to_load, pl.Utf8)
+
+    results_list = [
+        align_schema(df, target_schema=target_schema) for df in results_list_raw
+    ]
+
+    # Combine results efficiently
+    if results_list:
+        combined_results = pl.concat(results_list, how="vertical_relaxed")
+
+        # Apply exclusion filter if needed
+        if exclude_terms:
+            combined_results = find_rows_with_phrase_df(
+                df=combined_results,
+                columns=columns_to_search,
+                phrase=exclude_terms,
+                exclude=True,
+            )
+
+        # Convert back to lazy if requested
+        if lazy and isinstance(combined_results, pl.DataFrame):
+            return combined_results.lazy()
+        return combined_results
+
+    # Return empty DataFrame/LazyFrame with correct schema
+    empty_df = pl.DataFrame(schema=dict.fromkeys(columns_to_load, pl.Utf8))
+    return empty_df.lazy() if lazy else empty_df

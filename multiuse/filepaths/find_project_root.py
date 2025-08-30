@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from dotenv import find_dotenv, load_dotenv
 
@@ -17,7 +16,7 @@ class FindProjectRoot:
         debug: bool = False,
         raise_error_if_no_env_file: bool = False,
         raise_if_not_path: bool = False,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """
         Find the project root directory.
 
@@ -63,7 +62,7 @@ class FindProjectRoot:
         load_dotenv(find_dotenv(raise_error_if_not_found=raise_error_if_no_env_file))
 
     @staticmethod
-    def _get_project_root_from_env() -> Optional[Path]:
+    def _get_project_root_from_env() -> Path | None:
         if project_root := os.environ.get("MULTIUSE_PROJECT_ROOT"):
             return Path(project_root)
         return None

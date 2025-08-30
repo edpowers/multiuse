@@ -3,12 +3,11 @@
 import contextlib
 import sys
 import traceback
-from typing import Dict, Optional
 
 
 class CustomLoggingFuncs:
     @classmethod
-    def show_code_lines(cls, e: Optional[BaseException] = None) -> str:
+    def show_code_lines(cls, e: BaseException | None = None) -> str:
         """Show the code lines of the exception."""
         instance = cls()
         func_n_d = instance.get_parent_function_names()
@@ -26,7 +25,7 @@ class CustomLoggingFuncs:
     @staticmethod
     def get_parent_function_names() -> dict:
         """Get the parent function names as dict."""
-        func_n_d: Dict[str, str] = {}
+        func_n_d: dict[str, str] = {}
         func_n_l = [
             "func_name",
             "func_parent",
@@ -35,7 +34,7 @@ class CustomLoggingFuncs:
             "func_gggparent",
             "func_gggparent",
         ]
-        for i, name in zip(range(2, 6), func_n_l):
+        for i, name in zip(range(2, 6), func_n_l, strict=False):
             with contextlib.suppress(ValueError):
                 frame_val = sys._getframe(i)
                 func_name = frame_val.f_code.co_name
@@ -45,12 +44,11 @@ class CustomLoggingFuncs:
 
                 if func_val_str in func_n_d.values():
                     continue
-                else:
-                    func_n_d[name] = (
-                        f"{func_name}:_{func_line}_\n"
-                        if name == "func_parent"
-                        else f"{func_name}:_{func_line}_"
-                    )
+                func_n_d[name] = (
+                    f"{func_name}:_{func_line}_\n"
+                    if name == "func_parent"
+                    else f"{func_name}:_{func_line}_"
+                )
 
         return func_n_d
 

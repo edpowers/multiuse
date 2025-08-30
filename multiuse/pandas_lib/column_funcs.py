@@ -43,6 +43,6 @@ class ColumnFuncs:
     def drop_single_value_columns(df: pd.DataFrame) -> pd.DataFrame:
         """Drop columns that have only one unique value."""
         for col in df.columns:
-            if df[col].nunique() == 1:
-                df.drop(col, axis=1, inplace=True)
+            if len(df[col].unique()) == 1:
+                df = df.drop(col, axis=1)
         return df

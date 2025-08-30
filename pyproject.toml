@@ -1,49 +1,48 @@
-[tool.poetry]
+[project]
 name = "multiuse"
 version = "0.1.0"
 description = "Shared tools for use across projects"
-authors = ["Ed Powers <ed.a.powers@gmail.com>"]
+authors = [
+    {name = "Ed Powers", email = "ed.a.powers@gmail.com"}
+]
 readme = "README.md"
-packages = [
-    { include = "multiuse", from = "." },
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2.2",
+    "numpy>=2.0.0",
+    "tqdm>=4.66.4",
+    "python-dotenv>=1.0.1",
+    "pyarrow>=16.1.0",
+    "chardet>=5.2.0",
+    "astor>=0.8.1",
+    "pydantic>=2.7.4",
+    "selenium>=4.22.0",
+    "pre-commit>=3.7.1",
+    "pyhumps>=3.8.0",
+    "pyinstrument>=4.6.2",
+    "polars>=1.4.1",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pandas = "^2.2.2"
-numpy = "^2.0.0"
-tqdm = "^4.66.4"
-python-dotenv = "^1.0.1"
-pyarrow = "^16.1.0"
-chardet = "^5.2.0"
-astor = "^0.8.1"
-pydantic = "^2.7.4"
-selenium = "^4.22.0"
-pre-commit = "^3.7.1"
-pyhumps = "^3.8.0"
-pyinstrument = "^4.6.2"
-polars = "^1.4.1"
-
-
-[tool.poetry.group.dev.dependencies]
-black = "^24.4.2"
-mypy = "^1.10.1"
-flake8 = "^7.1.0"
-ipykernel = "^6.29.4"
-jupyter = "^1.0.0"
-pandas-stubs = "^2.2.2.240603"
-pytest-cov = "^5.0.0"
-pre-commit = "^3.7.1"
-isort = "^5.13.2"
-types-python-dateutil = "^2.9.0.20240906"
-
-
-[tool.poetry.group.expirimental.dependencies]
-browsermob-proxy = "^0.8.0"
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "mypy>=1.10.1",
+    "ipykernel>=6.29.4",
+    "jupyter>=1.0.0",
+    "pandas-stubs>=2.2.2.240603",
+    "pytest-cov>=5.0.0",
+    "pre-commit>=3.7.1",
+    "types-python-dateutil>=2.9.0.20240906",
+    "tox>=4.0.0",
+    "uv>=0.5.0",
+]
+experimental = [
+    "browsermob-proxy>=0.8.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 
 [tool.pytest.ini_options]
@@ -63,14 +62,84 @@ exclude_dirs = [".venv", "tests"]
 skips = ["B311"]
 
 
-[tool.isort]
-profile = "black"
-line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = false
-ensure_newline_before_comments = true
+[tool.ruff]
+# Same as Black.
+line-length = 120
+# Assume Python 3.12
+target-version = "py312"
 
-[tool.mypy]
-ignore_missing_imports = true
+exclude = ["test_*.py", "__init__.py"]
+
+lint.select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+
+lint.ignore = [
+    "E501",  # line too long, handled by formatter
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+# Allow autofix behavior for specific rules
+lint.fixable = ["ALL"]
+lint.unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 18
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*" = ["S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["multiuse"]
+
+
+
+
+[tool.basedpyright]
+extraPaths = ["multiuse"]
+include = ["multiuse"]
+exclude = ["**/node_modules", "**/__pycache__", "workbooks"]
+typeCheckingMode = "strict"
+strictListInference = true
+strictDictionaryInference = true
+reportGeneralTypeIssues = "error"
+reportPropertyTypeMismatch = "error"
+reportUndefinedVariable = "error"
+reportUnknownMemberType = "warning"
+reportUnknownVariableType = "warning"
+reportMissingModuleSource = "error"
+reportUnknownParameterType = "error"
+reportCallIssue = "error"              # Will catch incorrect function calls
+reportArgumentType = "error"           # Will catch argument type mismatches
+strictParameterNoneValue = true        # More strict parameter checking
+# reportUnknownArgumentType = "warning"    # Catches unknown argument types
+reportMissingParameterType = "error"   # Ensures all parameters have type hints
+reportFunctionMemberAccess = "error"   # Catches incorrect function member access
+reportMissingTypeStubs = false         # BasedPyright config
+reportAny = false
+reportImplicitOverride = false
+reportUnannotatedClassAttribute = false
+reportUnusedCallResult = false # only used in basedpyright in my local

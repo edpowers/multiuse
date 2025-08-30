@@ -3,10 +3,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import pandas as pd
-import pyarrow
+import pyarrow as pa
 
 
 class ParquetIO:
@@ -32,7 +32,7 @@ class ParquetIO:
         convert_to_json: bool = False,
         return_combined_df: bool = False,
         overwrite: bool = False,
-    ) -> Union[None, pd.DataFrame]:
+    ) -> None | pd.DataFrame:
         """Write to the parquet file specified.
 
         Validates the fpath after writing to make sure that it exists.
@@ -59,7 +59,7 @@ class ParquetIO:
         convert_to_json: bool = False,
         return_combined_df: bool = False,
         overwrite: bool = False,
-    ) -> Union[None, pd.DataFrame]:
+    ) -> None | pd.DataFrame:
         """Write the dataframe to parquet."""
         # Make the corresponding directory if it does not exist.
         # and set the write permissions for access.
@@ -141,7 +141,7 @@ class ParquetIO:
 
         try:
             df_to_return = pd.read_parquet(fpath)
-        except (pyarrow.lib.ArrowIOError, pyarrow.ArrowInvalid, OSError) as aie:
+        except (pa.lib.ArrowIOError, pa.ArrowInvalid, OSError) as aie:
             logging.error(f"ArrowIOError: removing corrupted fpath - {aie}")
             fpath.unlink(missing_ok=True)
 
@@ -172,7 +172,7 @@ class ParquetIO:
         logging.info(f"Successfully wrote to {fpath=}")
 
 
-def load_from_json(x: Union[str, int, float]) -> Union[dict, str, int, float]:
+def load_from_json(x: str | int | float) -> dict | str | int | float:
     """Load from json."""
     if not isinstance(x, str):
         return x
@@ -185,7 +185,7 @@ def load_from_json(x: Union[str, int, float]) -> Union[dict, str, int, float]:
         return x
 
 
-def convert_to_json(x: Any) -> Union[str, int, float]:
+def convert_to_json(x: Any) -> str | int | float:
     """Convert various data types to JSON-compatible format."""
     if isinstance(x, (str, int, float)):
         return x

@@ -1,7 +1,6 @@
 """Display output functions for Polars."""
 
 import re
-from typing import Optional
 
 import polars as pl
 from rich import print as rprint
@@ -10,7 +9,8 @@ from rich import print as rprint
 def highlight_results(
     results,
     search_terms: list[str],
-    columns_to_search: Optional[list[str]] = None,
+    exclude_terms: list[str] | None = None,
+    columns_to_search: list[str] | None = None,
     sample_size: int = 125,
     show_all: bool = False,
     print_output: bool = True,
@@ -42,7 +42,10 @@ def highlight_results(
         columns_to_search = ["COLLATERAL", "SEC_PARTY"]
 
     highlighted_results = highlight_columns(
-        df=results, columns=columns_to_search, search_terms=search_terms
+        df=results.sample(min(sample_size, results.height)),
+        columns=columns_to_search,
+        search_terms=search_terms,
+        exclude_terms=exclude_terms,
     )
 
     if not show_all and len(highlighted_results) > sample_size:
@@ -52,7 +55,7 @@ def highlight_results(
 
     if print_output:
         for row in sample.iter_rows():
-            for col, value in zip(highlighted_results.columns, row):
+            for col, value in zip(highlighted_results.columns, row, strict=False):
                 if col.endswith("_highlighted"):
                     try:
                         rprint(f"{col}:\n{value}\n")
@@ -62,7 +65,7 @@ def highlight_results(
 
         print(f"Total rows found - {len(results)}")
 
-    return highlighted_results
+    return results
 
 
 # Example usage:
@@ -97,7 +100,12 @@ def highlight_terms(text: str, search_terms: list[str], color: str = "red") -> s
 
 
 def highlight_columns(
-    df: pl.DataFrame, columns: list[str], search_terms: list[str], color: str = "yellow"
+    df: pl.DataFrame,
+    columns: list[str],
+    search_terms: list[str],
+    exclude_terms: list[str] | None = None,
+    color: str = "yellow",
+    exclude_color: str = "bright_red",
 ) -> pl.DataFrame:
     """
     Apply highlighting to specified columns in a Polars DataFrame.
@@ -120,6 +128,17 @@ def highlight_columns(
             )
             .alias(f"{col}_highlighted")
         )
+
+    if exclude_terms:
+        for col in columns:
+            df = df.with_columns(
+                pl.col(col)
+                .map_elements(
+                    lambda x: highlight_terms(str(x), exclude_terms, exclude_color),
+                    return_dtype=pl.Utf8,
+                )
+                .alias(f"{col}_highlighted")
+            )
     return df
 
 
@@ -147,52 +166,3 @@ def print_random_samples(
         print()
 
     return random_sample
-
-
-def find_rows_with_phrase_df(
-    df: pl.DataFrame,
-    columns: Optional[list[str]] = None,
-    phrase: Optional[str] = "",
-    exclude: bool = False,
-    use_default_exclude: bool = True,
-) -> pl.DataFrame:
-    """
-    Find rows in specified columns of a Polars DataFrame that contain or don't contain the given phrase.
-
-    Args
-    ----
-    df (pl.DataFrame):
-        The input Polars DataFrame to search.
-    columns (list[str], default = ["COLLATERAL", "SEC_PARTY"]):
-        List of column names to search.
-    phrase (str):
-        The phrase to search for.
-    exclude (bool, default = False):
-        If True, return rows that don't contain the phrase.
-
-    Returns:
-        pl.DataFrame: A DataFrame containing only the rows where the phrase was found (or not found if exclude is True) in any of the specified columns.
-    """
-    DEFAULT_EXCLUDE_PHRASE = "PLAYSTATION|mower|DVD|WEEDEATER|SHOTGUN|FLATSCREEN|FLAT SCREEN|HAND GUN|9MM|9NUN"
-
-    if exclude and use_default_exclude and isinstance(phrase, str):
-        if phrase == "":
-            phrase = DEFAULT_EXCLUDE_PHRASE
-        else:
-            phrase += "|" + DEFAULT_EXCLUDE_PHRASE
-
-    if not columns:
-        columns = ["COLLATERAL", "SEC_PARTY"]
-
-    # Create a boolean mask for each specified column
-    masks = [df[col].str.contains(phrase) for col in columns]
-
-    # Combine the masks using logical OR
-    combined_mask = pl.any_horizontal(*masks)
-
-    # If exclude is True, invert the mask
-    if exclude:
-        combined_mask = ~combined_mask
-
-    # Filter the DataFrame using the combined mask
-    return df.filter(combined_mask)

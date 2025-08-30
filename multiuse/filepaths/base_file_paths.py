@@ -2,10 +2,10 @@
 
 import os
 from pathlib import Path
-from pprint import pprint
-from typing import Dict
+from typing import ClassVar
 
 import pandas as pd
+from rich import print as rprint
 
 from multiuse.file_io.parquet_io import ParquetIO
 
@@ -23,10 +23,10 @@ class BaseFilePaths:
     """
 
     # Storing in the class instance.
-    data_dict: Dict[str, Path] = {}
+    data_dict: ClassVar[dict[str, Path]] = {}
 
     def __repr__(self) -> str:
-        pprint(self.data_dict)
+        rprint(self.data_dict)
         # Return an empty string.
         return ""
 
@@ -60,5 +60,4 @@ class BaseFilePaths:
 
         if fpath_to_read.suffix == ".parquet":
             return ParquetIO.read_parquet(fpath_to_read)
-        else:
-            raise ValueError(f"File type not supported: {fpath_to_read.suffix}")
+        raise ValueError(f"File type not supported: {fpath_to_read.suffix}")

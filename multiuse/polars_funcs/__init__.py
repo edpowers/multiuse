@@ -2,7 +2,9 @@ from multiuse.polars_funcs.display_output import highlight_results, print_random
 from multiuse.polars_funcs.polars_analysis_funcs import (
     add_associated_names,
     convert_column_to_json,
+    count_search_term_occurrences,
     find_rows_with_phrase_df,
+    format_search_string,
     format_vc_for_two_columns,
     get_column_stats,
     get_csv_metadata,
@@ -15,6 +17,10 @@ from multiuse.polars_funcs.polars_analysis_funcs import (
     query_columns_by_search_terms,
     write_lazy_results_to_csv,
     write_results_to_csv,
+    write_results_to_parquet,
+    align_schema,
+    find_rows_with_phrase_from_fpath,
+    search_partitioned_parquet,
 )
 
 __all__ = [
@@ -27,6 +33,7 @@ __all__ = [
     "get_value_counts_lazy",
     "print_random_samples",
     "write_results_to_csv",
+    "write_results_to_parquet",
     "write_lazy_results_to_csv",
     "query_columns_by_coordinate_pairs",
     "get_csv_metadata",
@@ -35,4 +42,9 @@ __all__ = [
     "format_vc_for_two_columns",
     "get_multi_column_value_counts_lazy",
     "find_rows_with_phrase_df",
+    "count_search_term_occurrences",
+    "format_search_string",
+    "align_schema",
+    "find_rows_with_phrase_from_fpath",
+    "search_partitioned_parquet",
 ]
