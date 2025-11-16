@@ -21,6 +21,7 @@ dependencies = [
     "pyhumps>=3.8.0",
     "pyinstrument>=4.6.2",
     "polars>=1.4.1",
+    "reportlab>=4.4.4",
 ]
 
 [project.optional-dependencies]
@@ -143,3 +144,8 @@ reportAny = false
 reportImplicitOverride = false
 reportUnannotatedClassAttribute = false
 reportUnusedCallResult = false # only used in basedpyright in my local
+
+[dependency-groups]
+experimental = [
+    "reportlab>=4.4.4",
+]

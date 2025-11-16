@@ -23,6 +23,7 @@ from multiuse.polars_funcs.polars_analysis_funcs import (
     search_partitioned_parquet,
 )
 
+
 __all__ = [
     "highlight_results",
     "query_column_by_search_terms",
