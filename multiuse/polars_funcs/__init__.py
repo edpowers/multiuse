@@ -21,6 +21,7 @@ from multiuse.polars_funcs.polars_analysis_funcs import (
     align_schema,
     find_rows_with_phrase_from_fpath,
     search_partitioned_parquet,
+    get_search_term_counts,
 )
 
 
@@ -48,4 +49,5 @@ __all__ = [
     "align_schema",
     "find_rows_with_phrase_from_fpath",
     "search_partitioned_parquet",
+    "get_search_term_counts"
 ]
