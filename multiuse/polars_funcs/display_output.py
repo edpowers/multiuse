@@ -14,6 +14,7 @@ def highlight_results(
     sample_size: int = 125,
     show_all: bool = False,
     print_output: bool = True,
+    return_highlighted_results: bool = False,
 ):
     """
     Highlight and optionally print search results from a Polars DataFrame.
@@ -41,6 +42,9 @@ def highlight_results(
     if not columns_to_search:
         columns_to_search = ["COLLATERAL", "SEC_PARTY"]
 
+    # For all search terms, remove any special characters:
+    search_terms = list(map(lambda x: re.sub(r"[\^-]", "", x), search_terms))  # noqa: C417
+
     highlighted_results = highlight_columns(
         df=results.sample(min(sample_size, results.height)),
         columns=columns_to_search,
@@ -64,6 +68,9 @@ def highlight_results(
             rprint("-" * 50)
 
         print(f"Total rows found - {len(results)}")
+
+    if return_highlighted_results:
+        return highlighted_results
 
     return results
 
@@ -142,9 +149,7 @@ def highlight_columns(
     return df
 
 
-def print_random_samples(
-    results: pl.DataFrame, column: str = "COLLATERAL", n: int = 5
-) -> pl.DataFrame:
+def print_random_samples(results: pl.DataFrame, column: str = "COLLATERAL", n: int = 5) -> pl.DataFrame:
     """
     Select n random rows from a specified column in the results DataFrame and print them.
 

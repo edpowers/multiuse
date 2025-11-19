@@ -22,6 +22,7 @@ dependencies = [
     "pyinstrument>=4.6.2",
     "polars>=1.4.1",
     "reportlab>=4.4.4",
+    "duckdb>=1.4.2",
 ]
 
 [project.optional-dependencies]
