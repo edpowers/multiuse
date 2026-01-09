@@ -1,12 +1,12 @@
 [project]
 name = "multiuse"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared tools for use across projects"
 authors = [
     {name = "Ed Powers", email = "ed.a.powers@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.2.2",
     "numpy>=2.0.0",

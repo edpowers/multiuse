@@ -4,6 +4,7 @@ import gzip
 import json
 import re
 from collections.abc import Callable
+from itertools import batched
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,70 @@ import duckdb
 import numpy as np
 import polars as pl
 from joblib import Parallel, delayed
-from rich import print as rprint
+
+EXCLUDED_SEARCH_TERMS = [
+    "MARINE",
+    "MERCURY",
+    "SKIFF",
+    "OIL",
+    "TRAILER",
+    "BOAT",
+    "HULL",
+    "BIMBOX STRYKER",
+    "STRYKER LOGISTICS",
+    "TREADMILL",
+    "TRUE FITNESS",
+    "PARCEL",
+    "ALUMAWELD",
+    "YAMAHA",
+    "KUBOTA",
+    "SUZUKI",
+    "FIBERGLASS",
+    "HONDA",
+    "CARHAULER",
+    "MOTOR",
+    "Aqua Finance",
+    "Cg Automation And Fixture",
+    "CHOPPER",
+    "SNOWPLOW",
+    "TAHOE",
+    "DEFENDER",
+    "STRYKER-MUNLEY",
+    "VIN#",
+    "VIN/",
+    "SENIOR HOUSING",
+    "STRYKER STREET",
+    "Farm Bureau Bank FSB",
+    "KAWASAKI",
+    "SUZUKI",
+    "HONDA",
+    "ARTICAT",
+    "KUBOTA",
+    "YAMAHA",
+    "POLARIS",
+    "Tobacco",
+    "MOWER",
+    "WHEELER",
+    "BOBCATLOADER",
+    "LEEBOY",
+    "TRAILER",
+    "FORKLIFT",
+    "VEHICLE",
+    "PNEUMATIC",
+    "NOMAD DONUTS",
+    "Envista Credit Union",
+    "Envista CU",
+    "NOMAD GROUP",
+    "Envista Federal",
+    "REAL ESTATE",
+    "Envista Federal Credit Union",
+    "CAMPER",
+    " VIN ",
+    " VIN#",
+    " V1N ",
+    "SURVEY PRO",
+    "FIBERGLASS",
+]
 
 
 def count_search_term_occurrences(
@@ -64,6 +128,7 @@ def get_search_term_counts(
     df: pl.DataFrame,
     search_terms: list[str],
     text_columns: list[str] = ["COLLATERAL", "SEC_PARTY"],
+    use_n_rows: int = 5_000,
 ) -> pl.DataFrame:
     """
     Count how many times each search term appears in the specified text columns.
@@ -77,6 +142,9 @@ def get_search_term_counts(
         DataFrame with search_term and count columns
     """
     counts = []
+
+    if use_n_rows:
+        df = df.head(use_n_rows)
 
     for term in search_terms:
         # Create a boolean mask for each text column that contains the search term
@@ -824,71 +892,6 @@ def query_by_year_range(
     return result
 
 
-EXCLUDED_SEARCH_TERMS = [
-    "MARINE",
-    "MERCURY",
-    "SKIFF",
-    "OIL",
-    "TRAILER",
-    "BOAT",
-    "HULL",
-    "BIMBOX STRYKER",
-    "STRYKER LOGISTICS",
-    "TREADMILL",
-    "TRUE FITNESS",
-    "PARCEL",
-    "ALUMAWELD",
-    "YAMAHA",
-    "KUBOTA",
-    "SUZUKI",
-    "FIBERGLASS",
-    "HONDA",
-    "CARHAULER",
-    "MOTOR",
-    "Aqua Finance",
-    "Cg Automation And Fixture",
-    "CHOPPER",
-    "SNOWPLOW",
-    "TAHOE",
-    "DEFENDER",
-    "STRYKER-MUNLEY",
-    "VIN#",
-    "VIN/",
-    "SENIOR HOUSING",
-    "STRYKER STREET",
-    "Farm Bureau Bank FSB",
-    "KAWASAKI",
-    "SUZUKI",
-    "HONDA",
-    "ARTICAT",
-    "KUBOTA",
-    "YAMAHA",
-    "POLARIS",
-    "Tobacco",
-    "MOWER",
-    "WHEELER",
-    "BOBCATLOADER",
-    "LEEBOY",
-    "TRAILER",
-    "FORKLIFT",
-    "VEHICLE",
-    "PNEUMATIC",
-    "NOMAD DONUTS",
-    "Envista Credit Union",
-    "Envista CU",
-    "NOMAD GROUP",
-    "Envista Federal",
-    "REAL ESTATE",
-    "Envista Federal Credit Union",
-    "CAMPER",
-    " VIN ",
-    " VIN#",
-    " V1N ",
-    "SURVEY PRO",
-    "FIBERGLASS",
-]
-
-
 def process_search_phrase(
     phrase: str | list[str] | None,
     exclude: bool = False,
@@ -1061,7 +1064,10 @@ def find_rows_with_phrase_df(
             print("No rows were found after exclusion. Returning original.")
             return df
 
-        print(f"Excluded {excluded_count:,} rows ({(excluded_count / initial_count) * 100:.2f}% of total)")
+        # print(
+        #     f"Excluded {excluded_count:,} rows "
+        #     f"({(excluded_count / initial_count) * 100:.2f}% of total)"
+        # )
 
     if not skip_garbage_collection and df is not None:
         # Force garbage collection
@@ -1209,31 +1215,19 @@ def find_rows_with_phrase_duckdb(
     word_boundary: bool = True,
     debug: bool = False,
 ) -> pl.DataFrame:
-    """
-    DuckDB text search with same logic as Polars version.
-
-    Key optimizations:
-    - Single regex pass with (term1|term2|...) pattern
-    - Pushdown filtering during parquet read
-    - No Python iteration over rows
-    """
+    """DuckDB text search with combined regex pattern."""
 
     if exclude and not search_terms:
-        if debug:
-            print("No exclude terms provided, returning all rows")
-        # Return full file
         conn = duckdb.connect()
-        return conn.execute("SELECT * FROM read_parquet(?)", [str(fpath)])
+        return conn.execute("SELECT * FROM read_parquet(?)", [str(fpath)]).pl()
 
-    # Normalize search terms to list
+    # Normalize
     if isinstance(search_terms, str):
         search_terms = [search_terms]
 
-    # Default column
     if not columns_to_search:
         columns_to_search = ["COLLATERAL"]
 
-    # Build column list
     # Column selection
     if read_all_columns:
         select_cols = "*"
@@ -1243,70 +1237,24 @@ def find_rows_with_phrase_duckdb(
 
     conn = duckdb.connect()
 
-    # Build regex pattern
-    # Build WHERE conditions
-    # if use_regex:
-    #     combined_pattern = ("(?i)" if not case_sensitive else "") + "|".join(
-    #         search_terms
-    #     )
-    #     conditions = [f"regexp_matches({col}, ?)" for col in columns_to_search]
-    #     params = [str(fpath)] + [combined_pattern] * len(columns_to_search)
-    # else:
-    #     conditions = []
-    #     params = [str(fpath)]
-
-    #     for col in columns_to_search:
-    #         if case_sensitive:
-    #             col_conditions = [f"{col} LIKE ?" for _ in search_terms]
-    #             params.extend([f"%{term}%" for term in search_terms])
-    #         else:
-    #             col_conditions = [f"contains(lower({col}), ?)" for _ in search_terms]
-    #             params.extend([term.lower() for term in search_terms])
-    #         conditions.append(f"({' OR '.join(col_conditions)})")
-    # Build WHERE conditions
-    if use_regex:
-        # Add word boundaries to each term
-        if word_boundary:
-            bounded_terms = [rf"\b{term}\b" for term in search_terms]
-        else:
-            bounded_terms = search_terms
-
-        combined_pattern = ("(?i)" if not case_sensitive else "") + "|".join(bounded_terms)
-        conditions = [f"regexp_matches({col}, ?)" for col in columns_to_search]
-        params = [str(fpath)] + [combined_pattern] * len(columns_to_search)
+    # Build single combined pattern
+    if word_boundary:
+        bounded_terms = [rf"\b{re.escape(term)}\b" for term in search_terms]
     else:
-        # Literal matching with word boundaries
-        conditions = []
-        params = [str(fpath)]
+        bounded_terms = [re.escape(term) for term in search_terms]
 
-        for col in columns_to_search:
-            if word_boundary:
-                # Match whole words: (^|\\s)term(\\s|$)
-                # Using regexp for literal with boundaries is more reliable
-                if case_sensitive:
-                    # DuckDB: use regexp_matches with escaped literals
-                    col_conditions = [f"regexp_matches({col}, ?)" for _ in search_terms]
-                    # Escape special regex chars and add boundaries
-                    import re
+    combined_pattern = ("(?i)" if not case_sensitive else "") + "|".join(bounded_terms)
 
-                    params.extend([rf"\b{re.escape(term)}\b" for term in search_terms])
-                else:
-                    col_conditions = [f"regexp_matches({col}, ?)" for _ in search_terms]
-                    import re
+    # Single condition per column with combined pattern
+    col_conditions = [f"regexp_matches({col}, ?)" for col in columns_to_search]
 
-                    params.extend([rf"(?i)\b{re.escape(term)}\b" for term in search_terms])
-            else:
-                # Original substring matching
-                if case_sensitive:
-                    col_conditions = [f"{col} LIKE ?" for _ in search_terms]
-                    params.extend([f"%{term}%" for term in search_terms])
-                else:
-                    col_conditions = [f"contains(lower({col}), ?)" for _ in search_terms]
-                    params.extend([term.lower() for term in search_terms])
+    # Join columns with OR (match in ANY column)
+    where_clause = " OR ".join(col_conditions)
 
-            conditions.append(f"({' OR '.join(col_conditions)})")
+    if exclude:
+        where_clause = f"NOT ({where_clause})"
 
-    where_clause = " OR ".join(conditions) if not exclude else " AND ".join([f"NOT ({cond})" for cond in conditions])
+    params = [str(fpath)] + [combined_pattern] * len(columns_to_search)
 
     query = f"""
     SELECT {select_cols}
@@ -1314,21 +1262,137 @@ def find_rows_with_phrase_duckdb(
     WHERE {where_clause}
     """
 
-    # Build params
-    if use_regex:
-        params = [str(fpath)] + [combined_pattern] * len(columns_to_search)
-    else:
-        # For literal: need term per column
-        params = [str(fpath)]
-        for _ in columns_to_search:
-            if case_sensitive:
-                params.extend([f"%{term}%" for term in search_terms])
-            else:
-                params.extend([term.lower() for term in search_terms])
+    if debug:
+        print(f"Pattern: {combined_pattern}")
+        print(f"Query: {query}")
 
     result = conn.execute(query, params)
-    # Drop helper column
     return result.pl()
+
+
+# def _find_rows_with_phrase_duckdb(
+#     fpath: Path | str,
+#     search_terms: str | list[str],
+#     columns_to_search: list[str],
+#     exclude: bool = False,
+#     case_sensitive: bool = False,
+#     use_regex: bool = True,
+#     read_all_columns: bool = False,
+#     additional_columns: list[str] | None = None,
+#     word_boundary: bool = True,
+#     debug: bool = False,
+# ) -> pl.DataFrame:
+#     """
+#     DuckDB text search with same logic as Polars version.
+
+#     Key optimizations:
+#     - Single regex pass with (term1|term2|...) pattern
+#     - Pushdown filtering during parquet read
+#     - No Python iteration over rows
+#     """
+
+#     if exclude and not search_terms:
+#         if debug:
+#             print("No exclude terms provided, returning all rows")
+#         # Return full file
+#         conn = duckdb.connect()
+#         return conn.execute("SELECT * FROM read_parquet(?)", [str(fpath)])
+
+#     # Normalize search terms to list
+#     if isinstance(search_terms, str):
+#         search_terms = [search_terms]
+
+#     # Default column
+#     if not columns_to_search:
+#         columns_to_search = ["COLLATERAL"]
+
+#     # Build column list
+#     # Column selection
+#     if read_all_columns:
+#         select_cols = "*"
+#     else:
+#         cols = list(set(columns_to_search + ["FILE_DATE", "ROW_INDEX"] + (additional_columns or [])))
+#         select_cols = ", ".join(cols)
+
+#     conn = duckdb.connect()
+
+#     # Build WHERE conditions
+#     if use_regex:
+#         if word_boundary:
+#             bounded_terms = [rf"\b{re.escape(term)}\b" for term in search_terms]
+#         else:
+#             bounded_terms = [re.escape(term) for term in search_terms]
+
+#         combined_pattern = ("(?i)" if not case_sensitive else "") + "|".join(bounded_terms)
+#         conditions = [f"regexp_matches({col}, ?)" for col in columns_to_search]
+#         params = [str(fpath)] + [combined_pattern] * len(columns_to_search)
+#     else:
+#         conditions = []
+#         params = [str(fpath)]
+
+#         if word_boundary:
+#             # Use combined regex even when use_regex=False
+#             for col in columns_to_search:
+#                 bounded_terms = [rf"\b{re.escape(term)}\b" for term in search_terms]
+#                 combined_pattern = ("(?i)" if not case_sensitive else "") + "|".join(bounded_terms)
+#                 conditions.append(f"regexp_matches({col}, ?)")
+#                 params.append(combined_pattern)
+#         else:
+#             # Substring matching
+#             for col in columns_to_search:
+#                 if case_sensitive:
+#                     col_conditions = [f"{col} LIKE ?" for _ in search_terms]
+#                     params.extend([f"%{term}%" for term in search_terms])
+#                 else:
+#                     col_conditions = [f"contains(lower({col}), ?)" for _ in search_terms]
+#                     params.extend([term.lower() for term in search_terms])
+#                 conditions.append(f"({' OR '.join(col_conditions)})")
+
+#     if debug:
+#         rprint(conditions)
+
+#     where_clause = " OR ".join(conditions) if not exclude else " AND ".join([f"NOT ({cond})" for cond in conditions])
+
+#     query = f"""
+#     SELECT {select_cols}
+#     FROM read_parquet(?)
+#     WHERE {where_clause}
+#     """
+
+#     result = conn.execute(query, params)
+#     # Drop helper column
+#     return result.pl()
+
+
+def find_rows_by_indices_duckdb(
+    fpath: Path | str,
+    row_indices: list[int],
+    read_all_columns: bool = False,
+    additional_columns: list[str] | None = None,
+) -> pl.DataFrame:
+    """Filter parquet by exact ROW_INDEX matches (cast from string to int64)."""
+
+    if not row_indices:
+        return pl.DataFrame()
+
+    conn = duckdb.connect()
+
+    if read_all_columns:
+        select_cols = "*"
+    else:
+        cols = list(set(["ROW_INDEX", "FILE_DATE"] + (additional_columns or [])))
+        select_cols = ", ".join(cols)
+
+    # DuckDB IN clause with cast
+    indices_str = ",".join(map(str, row_indices))
+
+    query = f"""
+    SELECT {select_cols}
+    FROM read_parquet(?)
+    WHERE CAST(ROW_INDEX AS BIGINT) IN ({indices_str})
+    """
+
+    return conn.execute(query, [str(fpath)]).pl()
 
 
 def search_partitioned_parquet(
@@ -1343,113 +1407,169 @@ def search_partitioned_parquet(
     n_jobs: int = -4,
     use_duckdb: bool = True,
     target_schema: dict[str, pl.DataType] | None = None,
+    search_by_indices: bool = False,
     use_regex: bool = True,
+    word_boundary: bool = True,
     debug: bool = False,
-) -> tuple[pl.DataFrame | pl.DataFrame]:
+    batch_size: int | None = None,  # NEW
+    dedup_columns: list[str] | None = None,  # NEW - defaults to ["ROW_INDEX"]
+    display_vc_counts: bool = False,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """
     Efficiently search through partitioned parquet files for specific terms.
 
-    This function optimizes for performance with large datasets by:
-    1. Only scanning required partitions
-    2. Using lazy evaluation and predicate pushdown
-    3. Only loading necessary columns
-    4. Applying filters at scan time when possible
-    5. Utilizing parallel processing with joblib
-
-    Args:
-        base_path: Path to the partitioned parquet directory
-        search_terms: List of terms to search for
-        columns_to_search: Columns to search within
-        partition_by: The column used for partitioning
-        partition_values: List of partition values to read. If None, reads all partitions.
-        exclude_terms: Optional list of terms to exclude from results
-        additional_columns: Additional columns to include in results beyond search columns
-        lazy: If True, returns a LazyFrame; if False, returns a DataFrame
-        n_jobs: Number of parallel jobs to run (-1 means using all processors)
-
-    Returns:
-        A LazyFrame or DataFrame containing the matching rows
+    New params:
+        batch_size: If provided, processes search_terms in batches of this size
+        dedup_columns: Columns to use for deduplication (default: ["ROW_INDEX"])
     """
-    base_path = Path(base_path)
+    dedup_columns = dedup_columns or ["ROW_INDEX"]
 
-    # Determine columns to load
+    # If batching requested, process in batches
+    if batch_size and search_terms and len(search_terms) > batch_size:
+        all_results = []
+        all_excluded = []
+
+        for batch in batched(search_terms, batch_size):
+            results, excluded = _search_single_batch(
+                base_path=base_path,
+                search_terms=list(batch),
+                columns_to_search=columns_to_search,
+                partition_by=partition_by,
+                partition_values=partition_values,
+                exclude_terms=exclude_terms,
+                additional_columns=additional_columns,
+                read_all_columns=read_all_columns,
+                n_jobs=n_jobs,
+                use_duckdb=use_duckdb,
+                search_by_indices=search_by_indices,
+                target_schema=target_schema,
+                use_regex=use_regex,
+                word_boundary=word_boundary,
+                debug=debug,
+            )
+
+            if display_vc_counts:
+                vc_counts = get_search_term_counts(results, batch, use_n_rows=2_500)
+                if not vc_counts.is_empty():
+                    print(vc_counts)
+
+            all_results.append(results)
+            all_excluded.append(excluded)
+
+        # Deduplicate and combine
+        combined_results = (
+            (pl.concat(all_results, how="vertical_relaxed").unique(subset=dedup_columns))
+            if all_results
+            else pl.DataFrame()
+        )
+
+        excluded_rows = (
+            (pl.concat(all_excluded, how="vertical_relaxed").unique(subset=dedup_columns))
+            if all_excluded
+            else pl.DataFrame()
+        )
+
+        return combined_results, excluded_rows
+
+    # No batching - use original logic
+    return _search_single_batch(
+        base_path=base_path,
+        search_terms=search_terms,
+        columns_to_search=columns_to_search,
+        partition_by=partition_by,
+        partition_values=partition_values,
+        exclude_terms=exclude_terms,
+        additional_columns=additional_columns,
+        read_all_columns=read_all_columns,
+        n_jobs=n_jobs,
+        use_duckdb=use_duckdb,
+        target_schema=target_schema,
+        use_regex=use_regex,
+        word_boundary=word_boundary,
+        debug=debug,
+    )
+
+
+def _search_single_batch(
+    base_path: str | Path,
+    search_terms: list[str] | None,
+    columns_to_search: list[str] | None,
+    partition_by: str,
+    partition_values: list[int] | None,
+    exclude_terms: list[str] | None,
+    additional_columns: list[str] | None,
+    read_all_columns: bool,
+    n_jobs: int,
+    use_duckdb: bool,
+    search_by_indices: bool,
+    target_schema: dict[str, pl.DataType] | None,
+    use_regex: bool,
+    word_boundary: bool,
+    debug: bool,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Original search logic - processes a single batch of terms."""
+    base_path = Path(base_path)
     columns_to_load = list(set(columns_to_search + (additional_columns or [])))
 
-    # If no partition values specified, discover all available partitions
+    # Discover partitions
     if partition_values is None:
         partition_values = []
         for path in base_path.glob(f"{partition_by}=*"):
             if path.is_dir():
                 try:
                     value = path.name.split("=")[1]
-                    # Try to convert to int if possible
-                    with contextlib.supress(ValueError):
+                    with contextlib.suppress(ValueError):
                         value = int(value)
                     partition_values.append(value)
                 except IndexError:
                     continue
 
-    # Build paths for each partition to read
+    # Build paths
     paths_to_read = []
     for value in partition_values:
         partition_dir = base_path / f"{partition_by}={value}"
         if partition_dir.exists():
-            # Get all parquet files in this partition
             parquet_files = list(partition_dir.rglob("*.parquet"))
             paths_to_read.extend([str(p) for p in parquet_files])
 
-    if debug:
-        rprint(sorted(paths_to_read))
-
     if not paths_to_read:
-        raise ValueError(f"No parquet files found for the specified partition values: {partition_values}")
+        raise ValueError(f"No parquet files found for partition values: {partition_values}")
 
+    # Process files in parallel
     if use_duckdb:
-        # results_list_raw = [
-        #     find_rows_with_phrase_duckdb(
-        #         fpath=f,
-        #         search_terms=search_terms,
-        #         columns_to_search=columns_to_search,
-        #         case_sensitive=False,
-        #         additional_columns=additional_columns,
-        #         debug=debug,
-        #     )
-        #     for f in tqdm(paths_to_read)
-        # ]
-
-        # Process files in parallel
-        def process_file(path):
-            return find_rows_with_phrase_duckdb(
+        if search_by_indices:
+            process_fn = lambda path: find_rows_by_indices_duckdb(
+                fpath=path,
+                row_indices=search_terms,
+                read_all_columns=True,
+            )
+        else:
+            process_fn = lambda path: find_rows_with_phrase_duckdb(
                 fpath=path,
                 search_terms=search_terms,
                 columns_to_search=columns_to_search,
                 case_sensitive=False,
                 additional_columns=additional_columns,
                 debug=debug,
-            )
-
-        # Use joblib for parallel processing
-        results_list_raw = Parallel(n_jobs=n_jobs)(delayed(process_file)(path) for path in paths_to_read)
-
-    else:
-        # Process files in parallel
-        def process_file(path):
-            return find_rows_with_phrase_from_fpath(
-                fpath=path,
-                search_terms=search_terms,
-                columns_to_search=columns_to_search,
-                lazy=False,  # We need to collect for parallel processing
-                additional_columns=additional_columns,
                 read_all_columns=read_all_columns,
+                word_boundary=word_boundary,
                 use_regex=use_regex,
             )
+    else:
+        process_fn = lambda path: find_rows_with_phrase_from_fpath(
+            fpath=path,
+            search_terms=search_terms,
+            columns_to_search=columns_to_search,
+            lazy=False,
+            additional_columns=additional_columns,
+            read_all_columns=read_all_columns,
+            use_regex=use_regex,
+        )
 
-        # Use joblib for parallel processing
-        results_list_raw = Parallel(n_jobs=n_jobs)(delayed(process_file)(path) for path in paths_to_read)
+    results_list_raw = Parallel(n_jobs=n_jobs)(delayed(process_fn)(path) for path in paths_to_read)
 
-    # Make sure that the column orders is aligned.
+    # Align schemas
     if read_all_columns:
-        # Then look within the schemas of the results_list_raw and get the union of all columns
         all_columns = {col for df in results_list_raw for col in df.columns}
         target_schema = dict.fromkeys(all_columns, pl.Utf8)
     else:
@@ -1458,32 +1578,20 @@ def search_partitioned_parquet(
 
     results_list = [align_schema(df, target_schema=target_schema) for df in results_list_raw]
 
-    # Combine results efficiently
+    # Combine and apply exclusions
     if results_list:
         combined_results = pl.concat(results_list, how="vertical_relaxed")
 
-        # Apply exclusion filter if needed and capture excluded rows
         if exclude_terms:
-            # Get rows that match exclusion terms (to be excluded)
             excluded_rows = find_rows_with_phrase_df(
-                df=combined_results,
-                columns=columns_to_search,
-                phrase=exclude_terms,
-                exclude=False,  # Get matching rows
+                df=combined_results, columns=columns_to_search, phrase=exclude_terms, exclude=False
             )
-
-            # Get rows that don't match exclusion terms (filtered result)
             combined_results = find_rows_with_phrase_df(
-                df=combined_results,
-                columns=columns_to_search,
-                phrase=exclude_terms,
-                exclude=True,  # Exclude matching rows
+                df=combined_results, columns=columns_to_search, phrase=exclude_terms, exclude=True
             )
         else:
-            # No exclusion terms - create empty dataframe with same schema
             excluded_rows = combined_results.head(0)
     else:
-        # Handle case where results_list is empty
         combined_results = pl.DataFrame()
         excluded_rows = pl.DataFrame()
 

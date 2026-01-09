@@ -1,4 +1,4 @@
-from multiuse.polars_funcs.display_output import highlight_results, print_random_samples
+from multiuse.polars_funcs.display_output import highlight_results, print_random_samples, plot_transaction_timeline, plot_product_sales
 from multiuse.polars_funcs.polars_analysis_funcs import (
     add_associated_names,
     convert_column_to_json,
@@ -49,5 +49,7 @@ __all__ = [
     "align_schema",
     "find_rows_with_phrase_from_fpath",
     "search_partitioned_parquet",
-    "get_search_term_counts"
+    "get_search_term_counts",
+    "plot_transaction_timeline",
+    "plot_product_sales",
 ]

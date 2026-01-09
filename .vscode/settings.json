@@ -1,14 +1,38 @@
 {
-    "editor.formatOnSave": true,
-    "editor.formatOnPaste": true,
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "always"
-    },
     "files.exclude": { // Exclude from the file explorer
         "**/.mypy_cache": true,
         "**/__pycache__": true,
         "**/.pytest_cache": true,
     },
-    "python.analysis.typeCheckingMode": "basic",
     "python.envFile": "${workspaceFolder}/.env",
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/.venv",
+    ],
+    "cursorpyright.analysis.extraPaths": ["${workspaceFolder}/.venv"],
+    "python.pythonPath": "${workspaceFolder}/.venv",
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.formatOnPaste": false,
+        "editor.wordWrapColumn": 80,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "explicit"
+        },
+    },
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always"
+    },
+    "editor.accessibilityPageSize": 1500,
+    "cursorpyright.analysis.inlayHints.genericTypes": false,
+    "ruff.format.backend": "uv",
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.defaultFoldingRangeProvider": "charliermarsh.ruff",
+    "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+    "[plaintext]": {
+        "editor.defaultFormatter": null
+    },
+    "editor.inlayHints.enabled": "off",
 }
