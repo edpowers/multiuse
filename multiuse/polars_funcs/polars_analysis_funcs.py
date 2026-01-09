@@ -1483,6 +1483,7 @@ def search_partitioned_parquet(
         read_all_columns=read_all_columns,
         n_jobs=n_jobs,
         use_duckdb=use_duckdb,
+        search_by_indices=search_by_indices,
         target_schema=target_schema,
         use_regex=use_regex,
         word_boundary=word_boundary,
