@@ -1238,7 +1238,9 @@ def find_rows_with_phrase_duckdb(
     conn = duckdb.connect()
 
     # Build single combined pattern
-    if word_boundary:
+    if use_regex:
+        bounded_terms = search_terms  # Use as-is for regex
+    elif word_boundary:
         bounded_terms = [rf"\b{re.escape(term)}\b" for term in search_terms]
     else:
         bounded_terms = [re.escape(term) for term in search_terms]
