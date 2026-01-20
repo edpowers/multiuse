@@ -27,7 +27,9 @@ def plot_product_sales(
 
     # 2. Aggregate by Month (not daily date)
     df_agg = (
-        df_clean.group_by(["month", product_col]).agg(pl.col("qty_safe").sum().alias("total_quantity")).sort("month")
+        df_clean.group_by(["month", product_col])
+        .agg(pl.col("qty_safe").sum().alias("total_quantity"))
+        .sort("month")
     )
 
     # 3. Identify Top N Products by Volume
@@ -71,6 +73,7 @@ def plot_transaction_timeline(
     height: int = 500,
     title: str | None = None,
     freq: str = "quarter",  # "quarter" or "month"
+    quantity_column: str | None = None,
 ) -> alt.Chart:
     """
     Plot transaction counts over time with improved readability.
@@ -88,11 +91,20 @@ def plot_transaction_timeline(
     # Parse dates
     plot_df = df.select(pl.col(date_col).str.to_date("%Y-%m-%d").alias("date"))
 
+    if quantity_column and quantity_column in plot_df:
+        count_expression = pl.col(quantity_column).sum().alias("count")
+    else:
+        count_expression = pl.len().alias("count")
+
     # Filter date range
     if start_date:
-        plot_df = plot_df.filter(pl.col("date") >= datetime.strptime(start_date, "%Y-%m-%d"))
+        plot_df = plot_df.filter(
+            pl.col("date") >= datetime.strptime(start_date, "%Y-%m-%d")
+        )
     if end_date:
-        plot_df = plot_df.filter(pl.col("date") <= datetime.strptime(end_date, "%Y-%m-%d"))
+        plot_df = plot_df.filter(
+            pl.col("date") <= datetime.strptime(end_date, "%Y-%m-%d")
+        )
 
     # Aggregate by period
     if freq == "quarter":
@@ -105,7 +117,7 @@ def plot_transaction_timeline(
 
         counts = (
             plot_df.group_by(["year", "quarter"])
-            .agg(pl.len().alias("count"))
+            .agg(count_expression)
             .sort(["year", "quarter"])
             .with_columns(period=pl.format("{}Q{}", "year", "quarter"))
         )
@@ -115,9 +127,11 @@ def plot_transaction_timeline(
         axis_config = alt.Axis(labelAngle=-45, labelOverlap=False)
 
     else:  # month
-        plot_df = plot_df.with_columns(period=pl.col("date").dt.strftime("%Y-%m-01").str.to_date())
+        plot_df = plot_df.with_columns(
+            period=pl.col("date").dt.strftime("%Y-%m-01").str.to_date()
+        )
 
-        counts = plot_df.group_by("period").agg(pl.len().alias("count")).sort("period")
+        counts = plot_df.group_by("period").agg(count_expression).sort("period")
 
         x_type = "period:T"
         x_title = "Month"
@@ -307,7 +321,9 @@ def highlight_columns(
     return df
 
 
-def print_random_samples(results: pl.DataFrame, column: str = "COLLATERAL", n: int = 5) -> pl.DataFrame:
+def print_random_samples(
+    results: pl.DataFrame, column: str = "COLLATERAL", n: int = 5
+) -> pl.DataFrame:
     """
     Select n random rows from a specified column in the results DataFrame and print them.
 
