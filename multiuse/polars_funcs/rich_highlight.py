@@ -67,7 +67,7 @@ class DisplayOutput:
         self.debug = debug
         self.console = Console()
 
-    def hightlight(self, text: str, width: int = 100) -> None:
+    def highlight(self, text: str, width: int = 100) -> None:
         self.console.print(highlight_proper_nouns("\n\n".join(split_text(text))), width=width)
 
 
