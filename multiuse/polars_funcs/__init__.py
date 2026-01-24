@@ -24,6 +24,7 @@ from multiuse.polars_funcs.polars_analysis_funcs import (
     get_search_term_counts,
 )
 
+from multiuse.polars_funcs.rich_highlight import DisplayOutput
 
 __all__ = [
     "highlight_results",
@@ -52,4 +53,5 @@ __all__ = [
     "get_search_term_counts",
     "plot_transaction_timeline",
     "plot_product_sales",
+    "DisplayOutput",
 ]
