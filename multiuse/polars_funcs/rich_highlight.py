@@ -52,7 +52,11 @@ def highlight_proper_nouns(text: str) -> Text:
                 rich_text.append(" ")
 
             # Update sentence_start if word ends with sentence punctuation
-            if word and re.search(r"[.!?]$", word) and not re.match(r"^[A-Z][a-z]?\.$", word):
+            if (
+                word
+                and re.search(r"[.!?]$", word)
+                and not re.match(r"^[A-Z][a-z]?\.$", word)
+            ):
                 sentence_start = True
             else:
                 sentence_start = False
@@ -68,7 +72,9 @@ class DisplayOutput:
         self.console = Console()
 
     def highlight(self, text: str, width: int = 100) -> None:
-        self.console.print(highlight_proper_nouns("\n\n".join(split_text(text))), width=width)
+        self.console.print(
+            highlight_proper_nouns("\n\n".join(split_text(text))), width=width
+        )
 
 
 # Example:

@@ -101,7 +101,12 @@ def count_search_term_occurrences(
     count_exprs = []
     for term in set(search_terms):
         # Sum the counts across all specified columns for each term
-        term_counts = sum([pl.col(col).str.count_matches(term).alias(f"{term}_{col}") for col in columns_to_search])
+        term_counts = sum(
+            [
+                pl.col(col).str.count_matches(term).alias(f"{term}_{col}")
+                for col in columns_to_search
+            ]
+        )
         count_exprs.append(term_counts.alias(f"count_{term}"))
 
     # Calculate all counts in one pass
@@ -151,13 +156,19 @@ def get_search_term_counts(
         mask = pl.lit(False)
         for col in text_columns:
             if col in df.columns:
-                mask = mask | pl.col(col).str.to_lowercase().str.contains(term.lower(), literal=True)
+                mask = mask | pl.col(col).str.to_lowercase().str.contains(
+                    term.lower(), literal=True
+                )
 
         # Count rows where the term appears in any of the text columns
         count = df.filter(mask).height
         counts.append({"search_term": term, "count": count})
 
-    return pl.DataFrame(counts).filter(pl.col("count").gt(0)).sort("count", descending=True)
+    return (
+        pl.DataFrame(counts)
+        .filter(pl.col("count").gt(0))
+        .sort("count", descending=True)
+    )
 
 
 def get_csv_metadata(file_path: Path) -> dict[str, Any]:
@@ -262,7 +273,9 @@ def query_csv(file_path: Path, query_func: Callable) -> pl.DataFrame:
     return query_func(scan).collect()
 
 
-def query_column_by_search_term(file_path: Path, column_name: str, search_term: str) -> pl.DataFrame:
+def query_column_by_search_term(
+    file_path: Path, column_name: str, search_term: str
+) -> pl.DataFrame:
     """
     Query the CSV file to find rows where the colum_name contains search_term.
 
@@ -301,7 +314,9 @@ def detect_encoding(file_path: Path, sample_size: int = 1000000) -> str:
     return chardet.detect(raw)["encoding"]
 
 
-def preprocess_large_csv(input_path: Path, output_path: Path, chunk_size: int = 1000000) -> None:
+def preprocess_large_csv(
+    input_path: Path, output_path: Path, chunk_size: int = 1000000
+) -> None:
     """
     Preprocess a large CSV file efficiently, handling both .csv and .csv.gz files.
 
@@ -345,7 +360,9 @@ def preprocess_large_csv(input_path: Path, output_path: Path, chunk_size: int = 
             writer.writerows(chunk)
 
 
-def scan_csv_path(file_path: Path, columns_dtypes: dict[str, pl.DataType]) -> pl.DataFrame:
+def scan_csv_path(
+    file_path: Path, columns_dtypes: dict[str, pl.DataType]
+) -> pl.DataFrame:
     """
     Scan a CSV file and return a lazy DataFrame.
 
@@ -392,13 +409,17 @@ def query_columns_with_exact_and_fuzzy(
         raise ValueError("exact_match must be a dictionary")
 
     # Determine columns to read
-    columns_to_read = list(set(list(exact_match.keys()) + list(fuzzy_match.keys()) if fuzzy_match else []))
+    columns_to_read = list(
+        set(list(exact_match.keys()) + list(fuzzy_match.keys()) if fuzzy_match else [])
+    )
 
     # Specify dtypes for columns
     dtypes = dict.fromkeys(columns_to_read, pl.Utf8)
 
     # Create scan object
-    scan = pl.scan_csv(file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True)
+    scan = pl.scan_csv(
+        file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
+    )
 
     # Build filter expression
     filter_expr = pl.lit(True)
@@ -424,7 +445,9 @@ def query_columns_with_exact_and_fuzzy(
     return result
 
 
-def query_column_by_search_terms(file_path: Path, column_name: str, search_terms: list[str]) -> pl.DataFrame:
+def query_column_by_search_terms(
+    file_path: Path, column_name: str, search_terms: list[str]
+) -> pl.DataFrame:
     """
     Query the CSV file to find rows where the specified column contains any of the search terms.
 
@@ -448,7 +471,9 @@ def query_column_by_search_terms(file_path: Path, column_name: str, search_terms
         encoding="utf8-lossy",  # Use lossy UTF-8 encoding
     )
 
-    return scan.filter(pl.col(column_name).str.contains(combined_pattern, literal=False)).collect()
+    return scan.filter(
+        pl.col(column_name).str.contains(combined_pattern, literal=False)
+    ).collect()
 
 
 def query_columns_by_search_terms(
@@ -481,11 +506,17 @@ def query_columns_by_search_terms(
         search_terms = [re.escape(term) for term in search_terms]
 
     if case_sensitive:
-        combined_pattern = "|".join(f"(^|\\s){re.escape(term)}" for term in search_terms)
+        combined_pattern = "|".join(
+            f"(^|\\s){re.escape(term)}" for term in search_terms
+        )
     else:
-        combined_pattern = "(?i)" + "|".join(f"(^|\\s){re.escape(term)}" for term in search_terms)
+        combined_pattern = "(?i)" + "|".join(
+            f"(^|\\s){re.escape(term)}" for term in search_terms
+        )
 
-    scan = pl.scan_csv(file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True)
+    scan = pl.scan_csv(
+        file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
+    )
 
     # Build the filter expression for the single column
     filter_expr = pl.col("COLLATERAL").str.contains(
@@ -527,18 +558,26 @@ def query_columns_by_coordinate_pairs(
     pl.DataFrame: Filtered DataFrame containing matching rows
     """
     if len(columns) != 2:
-        raise ValueError("Exactly two column names must be provided: [latitude, longitude]")
+        raise ValueError(
+            "Exactly two column names must be provided: [latitude, longitude]"
+        )
 
     # Specify dtypes for columns
     dtypes = dict.fromkeys(columns, pl.Float64)
 
-    scan = pl.scan_csv(file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True)
+    scan = pl.scan_csv(
+        file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
+    )
 
     # Build the filter expression for the coordinate pairs
     filter_expr = pl.lit(False)
     for lat, lon in coordinate_pairs:
-        lat_condition = (pl.col(columns[0]) >= lat - tolerance) & (pl.col(columns[0]) <= lat + tolerance)
-        lon_condition = (pl.col(columns[1]) >= lon - tolerance) & (pl.col(columns[1]) <= lon + tolerance)
+        lat_condition = (pl.col(columns[0]) >= lat - tolerance) & (
+            pl.col(columns[0]) <= lat + tolerance
+        )
+        lon_condition = (pl.col(columns[1]) >= lon - tolerance) & (
+            pl.col(columns[1]) <= lon + tolerance
+        )
         filter_expr |= lat_condition & lon_condition
 
     # Apply the filter and collect results
@@ -599,7 +638,9 @@ def format_search_string(
         Formatted regex pattern string
     """
     # If already a formatted regex pattern, return as-is
-    if isinstance(search_string, str) and ("\\" in search_string or any(c in search_string for c in ".*+?{}[]()^$|")):
+    if isinstance(search_string, str) and (
+        "\\" in search_string or any(c in search_string for c in ".*+?{}[]()^$|")
+    ):
         return search_string
 
     # Normalize to list for consistent processing
@@ -624,7 +665,13 @@ def format_search_string(
             processed_terms.append(name)
         else:
             # Clean special characters and escape for regex
-            cleaned_name = name.replace("(", "").replace(")", "").replace("[", "").replace("]", "").replace("*", "")
+            cleaned_name = (
+                name.replace("(", "")
+                .replace(")", "")
+                .replace("[", "")
+                .replace("]", "")
+                .replace("*", "")
+            )
             # Escape remaining special regex characters
             escaped_name = re.escape(cleaned_name)
             processed_terms.append(escaped_name)
@@ -638,40 +685,6 @@ def format_search_string(
     regex_pattern = rf"(?:^|\b|\s)(?:{'|'.join(processed_terms)})(?:\b|\s|$)"
 
     return regex_pattern
-
-
-def _format_search_string(
-    search_string: str | list[str],
-    convert_to_lowercase: bool = False,
-    use_regex: bool = True,
-) -> str:
-    # If search_string is already formatted or contains regex patterns, return as is
-    if isinstance(search_string, str) and ("\\" in search_string or any(c in search_string for c in ".*+?{}[]()^$|")):
-        return search_string
-
-    if convert_to_lowercase:
-        search_string = [name.lower() for name in search_string]
-
-    if len(search_string) <= 1:
-        regex_search = f"(^|\\b|\\s| )({search_string})(\\b|\\s|$| )"
-    elif len(search_string) > 1:
-        regex_search = []
-        for name in search_string:
-            # Only clean and escape if the string doesn't contain regex patterns
-            if not use_regex or not any(c in name for c in ".*+?{}[]()^$|"):
-                # Clean and escape special characters
-                cleaned_name = name.replace(")", "").replace("(", "").replace("[", "").replace("]", "").replace("*", "")
-                # Escape special regex characters
-                escaped_name = re.escape(cleaned_name)
-                regex_search.append(escaped_name)
-            else:
-                # Keep regex patterns as is
-                regex_search.append(name)
-
-        # Add boundary conditions once for the entire pattern
-        regex_search = f"(^|\\b|\\s| )({'|'.join(regex_search)})(\\b|\\s|$| )"
-
-    return regex_search
 
 
 def write_results_to_csv(
@@ -739,10 +752,16 @@ def get_value_counts_lazy(csv_path: Path, column_name: str) -> pl.DataFrame:
     Returns:
     pl.DataFrame: A DataFrame containing the value counts for the specified column
     """
-    return scan_csv_path(csv_path, {column_name: str}).select(pl.col(column_name).value_counts(sort=True)).collect()
+    return (
+        scan_csv_path(csv_path, {column_name: str})
+        .select(pl.col(column_name).value_counts(sort=True))
+        .collect()
+    )
 
 
-def get_multi_column_value_counts_lazy(csv_path: Path, column_names: list[str]) -> pl.DataFrame:
+def get_multi_column_value_counts_lazy(
+    csv_path: Path, column_names: list[str]
+) -> pl.DataFrame:
     """
     Get the combined value counts for multiple specified columns in a lazy DataFrame.
 
@@ -760,7 +779,12 @@ def get_multi_column_value_counts_lazy(csv_path: Path, column_names: list[str]) 
     df = scan_csv_path(csv_path, schema)
 
     # Compute combined value counts for the specified columns
-    return df.group_by(column_names).agg(pl.count().alias("count")).sort("count", descending=True).collect()
+    return (
+        df.group_by(column_names)
+        .agg(pl.count().alias("count"))
+        .sort("count", descending=True)
+        .collect()
+    )
 
 
 def format_vc_for_two_columns(value_counts: pl.DataFrame) -> pl.DataFrame:
@@ -775,7 +799,9 @@ def format_vc_for_two_columns(value_counts: pl.DataFrame) -> pl.DataFrame:
     """
     df_value_counts = value_counts.to_pandas()
 
-    df_value_counts["party"] = df_value_counts["SEC_PARTY"].apply(lambda x: x["SEC_PARTY"])
+    df_value_counts["party"] = df_value_counts["SEC_PARTY"].apply(
+        lambda x: x["SEC_PARTY"]
+    )
 
     df_value_counts["count"] = df_value_counts["SEC_PARTY"].apply(lambda x: x["count"])
 
@@ -838,7 +864,9 @@ def add_associated_names(
     full_df_lazy = scan_csv_path(csv_path, schema)
 
     # Group the full DataFrame by join columns and aggregate party names into a list
-    associated_names = full_df_lazy.group_by(join_columns).agg(pl.col(party_column).alias("temp_associated_names"))
+    associated_names = full_df_lazy.group_by(join_columns).agg(
+        pl.col(party_column).alias("temp_associated_names")
+    )
 
     # Convert count_df to lazy
     count_df_lazy = count_df.lazy()
@@ -847,10 +875,14 @@ def add_associated_names(
     result = count_df_lazy.join(associated_names, on=join_columns, how="left")
 
     # Add the associated_names column
-    result = result.with_columns([pl.col("temp_associated_names").fill_null([]).alias("associated_names_filled")])
+    result = result.with_columns(
+        [pl.col("temp_associated_names").fill_null([]).alias("associated_names_filled")]
+    )
 
     # Make the list unique
-    result = result.with_columns([pl.col("associated_names_filled").list.unique().alias("associated_names")])
+    result = result.with_columns(
+        [pl.col("associated_names_filled").list.unique().alias("associated_names")]
+    )
 
     # Drop the temporary columns
     result = result.drop(["temp_associated_names", "associated_names_filled"])
@@ -879,10 +911,17 @@ def query_by_year_range(
     # Specify dtype for the date column
     dtypes = {date_column: pl.Utf8}
 
-    scan = pl.scan_csv(file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True)
+    scan = pl.scan_csv(
+        file_path, dtypes=dtypes, encoding="utf8-lossy", ignore_errors=True
+    )
 
     # Build the filter expression for the year range
-    filter_expr = pl.col(date_column).str.strptime(pl.Date, "%Y-%m-%d").dt.year().is_between(start_year, end_year)
+    filter_expr = (
+        pl.col(date_column)
+        .str.strptime(pl.Date, "%Y-%m-%d")
+        .dt.year()
+        .is_between(start_year, end_year)
+    )
 
     # Apply the filter and collect results
     result = scan.filter(filter_expr).collect()
@@ -946,12 +985,6 @@ def create_substring_conditions(
         # For small lists, use single regex (still performant)
         pattern = format_search_string(terms, convert_to_lowercase=not case_sensitive)
         return lowercase_column.str.contains(pattern)
-
-        # For literal matching, use any_horizontal with multiple contains
-        # conditions = [
-        #     pl.col(col_name).str.contains(term, literal=True) for term in terms
-        # ]
-        # return pl.any_horizontal(conditions)
     # For large lists, split into chunks
     chunk_conditions = []
 
@@ -959,21 +992,6 @@ def create_substring_conditions(
         chunk = terms[i : i + chunk_size]
 
         pattern = format_search_string(chunk, convert_to_lowercase=not case_sensitive)
-
-        # print("Processing for pattern")
-        # rprint(pattern)
-        # if use_regex:
-        #     pattern = "|".join(pl.lit(term) for term in chunk)
-        #     chunk_conditions.append(
-        #         pl.col(col_name).str.contains(pattern, literal=False)
-        #     )
-        # else:
-        #     # Use any_horizontal for each chunk
-        #     sub_conditions = [
-        #         pl.col(col_name).str.contains(term, literal=True) for term in chunk
-        #     ]
-        #     chunk_conditions.append(pl.any_horizontal(sub_conditions))
-
         chunk_conditions.append(lowercase_column.str.contains(pattern, literal=False))
 
     # Combine all chunks with OR logic
@@ -986,102 +1004,66 @@ def find_rows_with_phrase_df(
     phrase: str | list[str] | None = "",
     exclude: bool = False,
     case_sensitive: bool = False,
-    use_regex: bool = True,
     debug: bool = False,
-    skip_garbage_collection: bool = True,
+    return_original_if_all_excluded: bool = False,
 ) -> pl.DataFrame | pl.LazyFrame:
     if exclude and not phrase:
-        # This isn't necessarily a warning since sometimes we wouldn't have
-        # any exclude terms, but can chain the methods together for convenience.
         if debug:
-            print("Returning original without exclusion since no exclude terms provided.")
+            print(
+                "Returning original without exclusion since no exclude terms provided."
+            )
         return df
 
-    if isinstance(df, pl.LazyFrame):
-        # Store initial count for comparison
-        initial_count = df.select(pl.count()).collect().item()
-    else:
-        initial_count = df.height
+    if not isinstance(df, pl.LazyFrame):
+        df = df.lazy()
 
-    # Convert to LazyFrame if not already
-    lf = df.lazy() if isinstance(df, pl.DataFrame) else df
-
+    # Store initial count for comparison
+    initial_count = df.select(pl.count()).collect().item()
     # Validate columns exist
     if not columns:
         columns = ["COLLATERAL"]
 
-    if exclude and not phrase:
-        if debug:
-            print("Returning original without exclusion since no exclude terms provided.")
-        return df
-
-    # Process the search phrase
-    # processed_phrase = process_search_phrase(phrase, exclude, use_default_exclude)
-    # processed_phrase = format_search_string(
-    #     phrase, convert_to_lowercase=not case_sensitive
-    # )
-
-    result = lf
-
     if exclude:
-        included_results_test = lf
-
-        processed_phrase = format_search_string(phrase, convert_to_lowercase=not case_sensitive)
-
+        processed_phrase = format_search_string(
+            phrase, convert_to_lowercase=not case_sensitive
+        )
+        result = df.clone()
         for column in columns:
-            included_results_test = included_results_test.filter(
+            result = result.filter(
                 ~pl.col(column).str.to_lowercase().str.contains(processed_phrase)
             )
-
-        result = included_results_test.collect()
     else:
-        rows_to_keep = []
-        # Keep rows that match the term in any column
-        for column in columns:
-            # rows_to_keep.append(
-            #     pl.col(column).str.to_lowercase().str.contains(processed_phrase)
-            # )
-
-            # Create match condition for this column
-            match_condition = create_substring_conditions(column, phrase, chunk_size=10, case_sensitive=case_sensitive)
-            rows_to_keep.append(match_condition)
-
-        result = result.filter(pl.any_horizontal(rows_to_keep))
+        result = df.filter(
+            pl.any_horizontal(
+                [
+                    create_substring_conditions(
+                        column, phrase, chunk_size=10, case_sensitive=case_sensitive
+                    )
+                    for column in columns
+                ]
+            )
+        )
 
     # Get final count and calculate excluded rows
-    if isinstance(result, pl.LazyFrame):
-        final_count = result.select(pl.count()).collect().item()
-    else:
-        final_count = result.height
-
+    final_count = result.select(pl.count()).collect().item()
     excluded_count = initial_count - final_count
 
-    if exclude and excluded_count > 0:
-        print(f"Excluded {excluded_count:,} rows ({(excluded_count / initial_count) * 100:.2f}% of total)")
+    if exclude and excluded_count > 0 and return_original_if_all_excluded:
+        print(
+            f"Excluded {excluded_count:,} rows ({(excluded_count / initial_count) * 100:.2f}% of total)"
+        )
 
         # If everything was excluded.
         if excluded_count == initial_count:
             print("No rows were found after exclusion. Returning original.")
             return df
 
-        # print(
-        #     f"Excluded {excluded_count:,} rows "
-        #     f"({(excluded_count / initial_count) * 100:.2f}% of total)"
-        # )
-
-    if not skip_garbage_collection and df is not None:
-        # Force garbage collection
-        # Set to None to remove the reference
-        df = None
-        # Force garbage collection
-        import gc
-
-        gc.collect()
-
-    return result.collect() if isinstance(result, pl.LazyFrame) else result
+    return result.collect()
 
 
-def align_schema(df: pl.DataFrame, target_schema: dict, fill_missing_columns: bool = True) -> pl.DataFrame:
+def align_schema(
+    df: pl.DataFrame, target_schema: dict, fill_missing_columns: bool = True
+) -> pl.DataFrame:
     """
     Align dataframe schema with target schema, including column order.
 
@@ -1099,14 +1081,24 @@ def align_schema(df: pl.DataFrame, target_schema: dict, fill_missing_columns: bo
             if dtype == pl.String and df[col_name].dtype == pl.Int64:
                 df = df.with_columns(pl.col(col_name).cast(pl.String))
             elif dtype == pl.Int64 and df[col_name].dtype == pl.String:
-                df = df.with_columns(pl.col(col_name).str.replace_all(r"^\s*$", "0").cast(pl.Int64, strict=False))
+                df = df.with_columns(
+                    pl.col(col_name)
+                    .str.replace_all(r"^\s*$", "0")
+                    .cast(pl.Int64, strict=False)
+                )
             elif dtype in (pl.Float64, pl.Float32) and df[col_name].dtype == pl.String:
-                df = df.with_columns(pl.col(col_name).str.replace_all(r"^\s*$", "0.0").cast(dtype, strict=False))
+                df = df.with_columns(
+                    pl.col(col_name)
+                    .str.replace_all(r"^\s*$", "0.0")
+                    .cast(dtype, strict=False)
+                )
             else:
                 df = df.with_columns(pl.col(col_name).cast(dtype))
 
         elif fill_missing_columns:
-            df = df.with_columns(pl.Series(name=col_name, values=[None] * len(df), dtype=dtype))
+            df = df.with_columns(
+                pl.Series(name=col_name, values=[None] * len(df), dtype=dtype)
+            )
 
     # Reorder columns to match target schema
     # Only include columns that exist in the DataFrame
@@ -1142,7 +1134,13 @@ def find_rows_with_phrase_from_fpath(
         scan_df = pl.scan_parquet(fpath, low_memory=True)
     else:
         scan_df = pl.scan_parquet(fpath, low_memory=True).select(
-            list(set(columns_to_search + ["FILE_DATE", "ROW_INDEX"] + (additional_columns or [])))
+            list(
+                set(
+                    columns_to_search
+                    + ["FILE_DATE", "ROW_INDEX"]
+                    + (additional_columns or [])
+                )
+            )
         )
 
     result = find_rows_with_phrase_df(
@@ -1232,7 +1230,13 @@ def find_rows_with_phrase_duckdb(
     if read_all_columns:
         select_cols = "*"
     else:
-        cols = list(set(columns_to_search + ["FILE_DATE", "ROW_INDEX"] + (additional_columns or [])))
+        cols = list(
+            set(
+                columns_to_search
+                + ["FILE_DATE", "ROW_INDEX"]
+                + (additional_columns or [])
+            )
+        )
         select_cols = ", ".join(cols)
 
     conn = duckdb.connect()
@@ -1460,13 +1464,21 @@ def search_partitioned_parquet(
 
         # Deduplicate and combine
         combined_results = (
-            (pl.concat(all_results, how="vertical_relaxed").unique(subset=dedup_columns))
+            (
+                pl.concat(all_results, how="vertical_relaxed").unique(
+                    subset=dedup_columns
+                )
+            )
             if all_results
             else pl.DataFrame()
         )
 
         excluded_rows = (
-            (pl.concat(all_excluded, how="vertical_relaxed").unique(subset=dedup_columns))
+            (
+                pl.concat(all_excluded, how="vertical_relaxed").unique(
+                    subset=dedup_columns
+                )
+            )
             if all_excluded
             else pl.DataFrame()
         )
@@ -1536,7 +1548,9 @@ def _search_single_batch(
             paths_to_read.extend([str(p) for p in parquet_files])
 
     if not paths_to_read:
-        raise ValueError(f"No parquet files found for partition values: {partition_values}")
+        raise ValueError(
+            f"No parquet files found for partition values: {partition_values}"
+        )
 
     # Process files in parallel
     if use_duckdb:
@@ -1569,7 +1583,9 @@ def _search_single_batch(
             use_regex=use_regex,
         )
 
-    results_list_raw = Parallel(n_jobs=n_jobs)(delayed(process_fn)(path) for path in paths_to_read)
+    results_list_raw = Parallel(n_jobs=n_jobs)(
+        delayed(process_fn)(path) for path in paths_to_read
+    )
 
     # Align schemas
     if read_all_columns:
@@ -1579,7 +1595,9 @@ def _search_single_batch(
         columns_to_load = list(set(columns_to_load + (additional_columns or [])))
         target_schema = target_schema or dict.fromkeys(columns_to_load, pl.Utf8)
 
-    results_list = [align_schema(df, target_schema=target_schema) for df in results_list_raw]
+    results_list = [
+        align_schema(df, target_schema=target_schema) for df in results_list_raw
+    ]
 
     # Combine and apply exclusions
     if results_list:
@@ -1587,10 +1605,16 @@ def _search_single_batch(
 
         if exclude_terms:
             excluded_rows = find_rows_with_phrase_df(
-                df=combined_results, columns=columns_to_search, phrase=exclude_terms, exclude=False
+                df=combined_results,
+                columns=columns_to_search,
+                phrase=exclude_terms,
+                exclude=False,
             )
             combined_results = find_rows_with_phrase_df(
-                df=combined_results, columns=columns_to_search, phrase=exclude_terms, exclude=True
+                df=combined_results,
+                columns=columns_to_search,
+                phrase=exclude_terms,
+                exclude=True,
             )
         else:
             excluded_rows = combined_results.head(0)

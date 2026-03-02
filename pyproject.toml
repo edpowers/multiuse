@@ -1,6 +1,6 @@
 [project]
 name = "multiuse"
-version = "0.1.04"
+version = "0.1.5"
 description = "Shared tools for use across projects"
 authors = [
     {name = "Ed Powers", email = "ed.a.powers@gmail.com"}
