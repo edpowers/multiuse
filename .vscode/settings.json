@@ -8,8 +8,6 @@
     "python.autoComplete.extraPaths": [
         "${workspaceFolder}/.venv",
     ],
-    "cursorpyright.analysis.extraPaths": ["${workspaceFolder}/.venv"],
-    "python.pythonPath": "${workspaceFolder}/.venv",
     "editor.formatOnPaste": false,
     "editor.formatOnSave": true,
     "[python]": {
@@ -26,7 +24,6 @@
         "source.organizeImports": "always"
     },
     "editor.accessibilityPageSize": 1500,
-    "cursorpyright.analysis.inlayHints.genericTypes": false,
     "ruff.format.backend": "uv",
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.defaultFoldingRangeProvider": "charliermarsh.ruff",
