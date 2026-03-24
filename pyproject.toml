@@ -1,6 +1,6 @@
 [project]
 name = "multiuse"
-version = "0.1.6"
+version = "0.1.7"
 description = "Shared tools for use across projects"
 authors = [
     {name = "Ed Powers", email = "ed.a.powers@gmail.com"}
@@ -19,6 +19,7 @@ dependencies = [
     "pyarrow>=23.0.1",
     "rich>=14.3.3",
     "joblib>=1.5.3",
+    "altair>=6.0.0",
 ]
 
 
