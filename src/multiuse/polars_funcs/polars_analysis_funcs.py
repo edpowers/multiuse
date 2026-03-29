@@ -271,7 +271,7 @@ def find_rows_with_phrase_df(
         df = df.lazy()
 
     # Store initial count for comparison
-    initial_count = collect_df(df).item()
+    initial_count = collect_df(df).height
     # Validate columns exist
     if not columns:
         columns = ["COLLATERAL"]
@@ -303,7 +303,7 @@ def find_rows_with_phrase_df(
 
     # Get final count and calculate excluded rows
     result_final = collect_df(result)
-    excluded_count = initial_count - result_final.item()
+    excluded_count = initial_count - result_final.height
 
     if exclude and excluded_count > 0 and return_original_if_all_excluded:
         print(
