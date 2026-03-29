@@ -1,5 +1,6 @@
 import contextlib
 import re
+from functools import partial
 from itertools import batched
 from pathlib import Path
 from typing import cast
@@ -687,14 +688,14 @@ def _search_single_batch(
     # Process files in parallel
     if use_duckdb:
         if search_by_indices:
-            process_fn = find_rows_by_indices_duckdb(
-                fpath=path,
+            process_fn = partial(
+                find_rows_by_indices_duckdb,
                 row_indices=cast("list[int]", search_terms),
                 read_all_columns=True,
             )
         else:
-            process_fn = find_rows_with_phrase_duckdb(
-                fpath=path,
+            process_fn = partial(
+                find_rows_with_phrase_duckdb,
                 search_terms=search_terms,
                 columns_to_search=columns_to_search,
                 case_sensitive=False,
@@ -705,8 +706,8 @@ def _search_single_batch(
                 use_regex=use_regex,
             )
     else:
-        process_fn = find_rows_with_phrase_from_fpath(
-            fpath=path,
+        process_fn = partial(
+            find_rows_with_phrase_from_fpath,
             search_terms=search_terms,
             columns_to_search=columns_to_search,
             lazy=False,
