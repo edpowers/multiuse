@@ -6,6 +6,7 @@ from datetime import datetime
 import altair as alt
 import polars as pl
 from rich import print as rprint
+from rich.console import Console
 
 
 def plot_product_sales(
@@ -226,16 +227,31 @@ def highlight_results(
         sample = highlighted_results
 
     if print_output:
-        for row in sample.iter_rows():
-            for col, value in zip(highlighted_results.columns, row, strict=False):
-                if col.endswith("_highlighted"):
-                    try:
-                        rprint(f"{col}:\n{value}\n")
-                    except Exception as e:
-                        print(f"Error printing {col}: {e}")
-            rprint("-" * 50)
+        console = Console()
 
-        print(f"Total rows found - {len(results)}")
+        with console.capture() as capture:
+            for row in sample.iter_rows():
+                for col, value in zip(highlighted_results.columns, row, strict=False):
+                    if col.endswith("_highlighted"):
+                        try:
+                            console.print(f"{col}:\n{value}\n")
+                        except Exception as e:
+                            console.print(f"Error printing {col}: {e}")
+                console.print("-" * 50)
+            console.print(f"Total rows found - {len(results)}")
+        print(capture.get())
+
+    # if print_output:
+    #     for row in sample.iter_rows():
+    #         for col, value in zip(highlighted_results.columns, row, strict=False):
+    #             if col.endswith("_highlighted"):
+    #                 try:
+    #                     rprint(f"{col}:\n{value}\n")
+    #                 except Exception as e:
+    #                     print(f"Error printing {col}: {e}")
+    #         rprint("-" * 50)
+
+    #     print(f"Total rows found - {len(results)}")
 
     if return_highlighted_results:
         return highlighted_results
