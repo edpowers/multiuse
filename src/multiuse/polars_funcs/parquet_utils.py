@@ -12,20 +12,30 @@ def append_to_parquet(
     dedupe_cols: list[str] | None = None,
 ) -> pl.DataFrame:
     """Append new records to an existing parquet file, deduplicating on key_col."""
+    df_nu = df_new.lazy() if not isinstance(df_new, pl.LazyFrame) else df_new
+
     if path.exists():
-        df_existing = pl.read_parquet(path)
+        df_existing = pl.scan_parquet(path)
         # Only keep new records not already in the file
         if key_col:
-            df_new = df_new.filter(~pl.col(key_col).is_in(df_existing[key_col]))
+            df_nu = (
+                df_nu.lazy()
+                .join(df_existing.select(key_col), on=key_col, how="anti")
+                .collect()
+            )
 
-        df_combined = pl.concat([df_existing, df_new], how="diagonal_relaxed")
+        df_combined = pl.concat([df_existing, df_nu], how="diagonal_relaxed")
 
         if dedupe_cols:
             df_combined = df_combined.unique(dedupe_cols)
     else:
-        df_combined = df_new
+        df_combined = df_nu
 
-    df_combined.write_parquet(path, mkdir=True)
+    df_combined.sink_parquet(path, mkdir=True)
 
-    return df_combined
+    df_return = df_combined.collect()
+    if not isinstance(df_return, pl.DataFrame):
+        te_msg = "Expected a Polars DataFrame"
+        raise TypeError(te_msg)
 
+    return df_return

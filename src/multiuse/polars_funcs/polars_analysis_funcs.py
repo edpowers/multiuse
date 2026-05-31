@@ -8,6 +8,7 @@ from typing import cast
 import duckdb
 import polars as pl
 from joblib import Parallel, delayed
+from rich import print as rprint
 
 EXCLUDED_SEARCH_TERMS = [
     "MARINE",
@@ -768,3 +769,78 @@ def _search_single_batch(
         excluded_rows = excluded_rows.collect()
 
     return cast("pl.DataFrame", combined_results), cast("pl.DataFrame", excluded_rows)
+
+
+def rejoin_with_original_row_indices(
+    results_path: Path,
+    search_path: Path,
+    df_prod_min: pl.DataFrame,
+    debug: bool = False,
+) -> pl.DataFrame:
+    # results_path = company_search.f_historical_for_row_index_mapping
+    # search_path: company_search.partitioned_parquet_path
+
+    if results_path is not None and results_path.exists():
+        results_prev = pl.read_parquet(results_path)
+
+        row_indices_find = (
+            df_prod_min.filter(
+                ~pl.col("ROW_INDEX")
+                .cast(pl.Int64)
+                .is_in(results_prev["ROW_INDEX"].cast(pl.Int64).implode())
+            )["ROW_INDEX"]
+            .unique()
+            .drop_nulls()
+            .to_list()
+        )
+    else:
+        row_indices_find = df_prod_min["ROW_INDEX"].unique().drop_nulls().to_list()
+        results_prev = pl.DataFrame()
+
+    if row_indices_find:
+        if debug:
+            rprint(f"Trying to find {len(row_indices_find)=}")
+
+        # Will need to re-search based on the values defined - so as to pull in the other columns.
+        results, _ = search_partitioned_parquet(
+            base_path=search_path,
+            search_terms=row_indices_find,
+            exclude_terms=[],
+            columns_to_search=["ROW_INDEX"],
+            partition_by="FILE_YEAR",
+            partition_values=list(range(2015, 2050)),
+            search_by_indices=True,
+            use_duckdb=True,
+            debug=False,
+            read_all_columns=True,
+            batch_size=100,
+            display_vc_counts=False,
+            # use_regex=False,
+        )
+    else:
+        results = results_prev
+
+    if results_prev.height > 0 and row_indices_find:
+        results = (
+            pl.concat([results, results_prev], how="diagonal_relaxed")
+            .unique(["ROW_INDEX"])
+            .sort(["FILE_DATE"])
+        )
+
+    results = results.with_columns(pl.col("ROW_INDEX").cast(pl.Int64)).drop(
+        [
+            "SECADR1",
+            "SECADR2",
+            "SECTYPE",
+            "DEBTTYPE",
+            "COLLATERAL",
+            "SEC_LONGITUDE",
+            "SEC_LATITUDE",
+            "load_date",
+        ],
+        strict=False,
+    )
+
+    results.write_parquet(results_path)
+
+    return results

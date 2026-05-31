@@ -44,13 +44,21 @@ def plot_product_sales(
     # 4. Filter & Plot
     df_filtered = df_agg.filter(pl.col(product_col).is_in(top_products.implode()))
 
+    max_y = df_filtered.get_column("total_quantity").max()
+    y_upper = max_y * 1.05  # 5% headroom
+
     return (
         alt.Chart(df_filtered.to_pandas())
         .mark_line(point=True)
         .encode(
             # Now 'month' actually exists in the dataframe
             x=alt.X("month:T", title="Date", axis=alt.Axis(format="%Y-%b")),
-            y=alt.Y("total_quantity:Q", title="Total Quantity Sold"),
+            # y=alt.Y("total_quantity:Q", title="Total Quantity Sold"),
+            y=alt.Y(
+                "total_quantity:Q",
+                title="Total Quantity Sold",
+                scale=alt.Scale(domain=[0, y_upper], nice=True),
+            ),
             color=alt.Color(f"{product_col}:N", title="Product"),
             tooltip=[
                 alt.Tooltip("month:T", format="%Y-%B"),
@@ -59,7 +67,7 @@ def plot_product_sales(
             ],
         )
         .properties(width=800, height=400, title=title)
-        .interactive()
+        # .interactive()
     )
 
 
@@ -212,7 +220,7 @@ def highlight_results(
         columns_to_search = ["COLLATERAL", "SEC_PARTY"]
 
     # For all search terms, remove any special characters:
-    search_terms = list(map(lambda x: re.sub(r"[\^-]", "", x), search_terms))  # noqa: C417
+    search_terms = list(map(lambda x: re.sub(r"[\^-]", "", x), search_terms))
 
     highlighted_results = highlight_columns(
         df=results.sample(min(sample_size, results.height)),
