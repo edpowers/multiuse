@@ -58,7 +58,7 @@ line-length = 88
 # Assume Python 3.12
 target-version = "py312"
 
-exclude = ["test_*.py", "__init__.py"]
+exclude = ["test_*.py", "__init__.py", "notebooks"]
 
 lint.select = [
     "E",   # pycodestyle errors
