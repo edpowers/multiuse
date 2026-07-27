@@ -1,6 +1,6 @@
 [project]
 name = "multiuse"
-version = "0.1.10"
+version = "0.1.11"
 description = "Shared tools for use across projects"
 authors = [
     {name = "Ed Powers", email = "ed.a.powers@gmail.com"}
@@ -20,6 +20,7 @@ dependencies = [
     "rich>=14.3.3",
     "joblib>=1.5.3",
     "altair>=6.0.0",
+    "rapidfuzz>=3.14.5",
 ]
 
 
@@ -58,7 +59,7 @@ line-length = 88
 # Assume Python 3.12
 target-version = "py312"
 
-exclude = ["test_*.py", "__init__.py"]
+exclude = ["test_*.py", "__init__.py", "notebooks"]
 
 lint.select = [
     "E",   # pycodestyle errors
