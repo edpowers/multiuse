@@ -20,6 +20,7 @@ dependencies = [
     "rich>=14.3.3",
     "joblib>=1.5.3",
     "altair>=6.0.0",
+    "rapidfuzz>=3.14.5",
 ]
 
 
