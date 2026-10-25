@@ -35,7 +35,6 @@ dev = [
 
 local = [
     "ipykernel>=7.4.0",
-    "jupyter>=1.1.1",
 ]
 
 [build-system]
