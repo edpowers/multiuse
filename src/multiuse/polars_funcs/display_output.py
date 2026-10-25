@@ -20,7 +20,8 @@ def plot_product_sales(
     #    We fill null quantities with 0 (or 1, depending on your business logic)
     df_clean = df.with_columns(
         [
-            pl.col(date_col).cast(pl.Date).dt.truncate("1mo").alias("month"),
+            # polars 2.0 removed the string -> Date cast; parse explicitly.
+            pl.col(date_col).str.to_date().dt.truncate("1mo").alias("month"),
             pl.col(quantity_col).fill_null(0).alias("qty_safe"),
         ],
     )
