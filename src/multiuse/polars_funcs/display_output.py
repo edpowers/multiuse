@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime
+from typing import cast
 
 import altair as alt
 import polars as pl
@@ -45,12 +46,18 @@ def plot_product_sales(
     df_filtered = df_agg.filter(pl.col(product_col).is_in(top_products.implode()))
 
     max_y = df_filtered.get_column("total_quantity").max()
-    y_upper = max_y * 1.05  # 5% headroom
+    if max_y is None:
+        ve_msg = "No rows to plot after filtering to the top products."
+        raise ValueError(ve_msg)
+    y_upper = cast("float", max_y) * 1.05  # 5% headroom
+
+    # altair's @use_signature erases the `Self` return type of every mark_*
+    # method, so the cast is what lets `.encode` resolve.
+    # https://github.com/vega/altair/blob/main/altair/utils/core.py
+    chart = cast("alt.Chart", alt.Chart(df_filtered.to_pandas()).mark_line(point=True))
 
     return (
-        alt.Chart(df_filtered.to_pandas())
-        .mark_line(point=True)
-        .encode(
+        chart.encode(
             # Now 'month' actually exists in the dataframe
             x=alt.X("month:T", title="Date", axis=alt.Axis(format="%Y-%b")),
             # y=alt.Y("total_quantity:Q", title="Total Quantity Sold"),
@@ -65,14 +72,14 @@ def plot_product_sales(
                 product_col,
                 alt.Tooltip("total_quantity", format=","),
             ],
-        )
-        .properties(width=800, height=400, title=title)
+        ).properties(width=800, height=400, title=title)
         # .interactive()
     )
 
 
 def plot_transaction_timeline(
     df: pl.DataFrame,
+    *,
     date_col: str = "FILE_DATE",
     start_date: str | None = None,
     end_date: str | None = None,
@@ -149,11 +156,18 @@ def plot_transaction_timeline(
             tickCount="month",
         )
 
-    # Create chart
+    # Create chart.  Cast for the same altair `@use_signature`
+    # limitation as in plot_product_sales.
+    chart = cast(
+        "alt.Chart",
+        alt.Chart(counts).mark_line(
+            point=alt.OverlayMarkDef(size=60, filled=True),
+            strokeWidth=2.5,
+        ),
+    )
+
     return (
-        alt.Chart(counts)
-        .mark_line(point=alt.OverlayMarkDef(size=60, filled=True), strokeWidth=2.5)
-        .encode(
+        chart.encode(
             x=alt.X(x_type, title=x_title, axis=axis_config),
             y=alt.Y(
                 "count:Q",
@@ -220,7 +234,7 @@ def highlight_results(
         columns_to_search = ["COLLATERAL", "SEC_PARTY"]
 
     # For all search terms, remove any special characters:
-    search_terms = list(map(lambda x: re.sub(r"[\^-]", "", x), search_terms))
+    search_terms = [re.sub(r"[\^-]", "", term) for term in search_terms]
 
     highlighted_results = highlight_columns(
         df=results.sample(min(sample_size, results.height)),

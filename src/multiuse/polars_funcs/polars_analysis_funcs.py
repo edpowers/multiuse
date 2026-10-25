@@ -423,6 +423,7 @@ def find_rows_with_phrase_duckdb(
     fpath: Path | str,
     search_terms: str | list[str],
     columns_to_search: list[str],
+    *,
     exclude: bool = False,
     case_sensitive: bool = False,
     use_regex: bool = True,
@@ -527,6 +528,7 @@ def find_rows_by_indices_duckdb(
 
 def _search_single_batch(
     base_path: str | Path,
+    *,
     paths_to_read: list[Path] | None,
     search_terms: list[str] | None,
     columns_to_search: list[str] | None,
@@ -554,30 +556,30 @@ def _search_single_batch(
 
     columns_to_load = list(set(columns_to_search + (additional_columns or [])))
 
-    # Discover partitions
+    # Discover partitions.  A directory name may carry a non-numeric value,
+    # so the discovered list is wider than the `list[int]` callers pass in.
+    values_to_scan: list[int | str] = list(partition_values or [])
     if partition_values is None:
-        partition_values = []
         for path in base_path.glob(f"{partition_by}=*"):
             if path.is_dir():
                 try:
-                    value = path.name.split("=")[1]
+                    value: int | str = path.name.split("=")[1]
                     with contextlib.suppress(ValueError):
                         value = int(value)
-                    partition_values.append(value)
+                    values_to_scan.append(value)
                 except IndexError:
                     continue
 
     # Build paths
     if not paths_to_read:
         paths_to_read = []
-        for value in partition_values:
+        for value in values_to_scan:
             partition_dir = base_path / f"{partition_by}={value}"
             if partition_dir.exists():
-                parquet_files = list(partition_dir.rglob("*.parquet"))
-                paths_to_read.extend([str(p) for p in parquet_files])
+                paths_to_read.extend(partition_dir.rglob("*.parquet"))
 
     if not paths_to_read:
-        ve_string = f"No parquet files found for partition values: {partition_values}"
+        ve_string = f"No parquet files found for partition values: {values_to_scan}"
         raise ValueError(ve_string)
 
     if use_duckdb:
@@ -743,6 +745,7 @@ def rejoin_with_original_row_indices(
 
 def search_partitioned_parquet(
     base_path: str | Path,
+    *,
     paths_to_read: list[Path] | None = None,
     search_terms: list[str] | None = None,
     columns_to_search: list[str] | None = None,
