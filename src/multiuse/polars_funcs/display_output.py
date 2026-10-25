@@ -54,7 +54,7 @@ def plot_product_sales(
     # altair's @use_signature erases the `Self` return type of every mark_*
     # method, so the cast is what lets `.encode` resolve.
     # https://github.com/vega/altair/blob/main/altair/utils/core.py
-    chart = cast("alt.Chart", alt.Chart(df_filtered.to_pandas()).mark_line(point=True))
+    chart = cast("alt.Chart", alt.Chart(df_filtered).mark_line(point=True))
 
     return (
         chart.encode(
