@@ -436,7 +436,10 @@ def find_rows_with_phrase_duckdb(
 
     if exclude and not search_terms:
         conn = duckdb.connect()
-        return conn.execute("SELECT * FROM read_parquet(?)", [str(fpath)]).pl()
+        # duckdb 2.0 carries .pl() on the relation that sql() returns, not on
+        # the connection that execute() returns.
+        # https://duckdb.org/docs/stable/clients/python/relational_api
+        return conn.sql("SELECT * FROM read_parquet(?)", params=[str(fpath)]).pl()
 
     # Normalize
     if isinstance(search_terms, str):
@@ -491,8 +494,7 @@ def find_rows_with_phrase_duckdb(
         print(f"Pattern: {combined_pattern}")
         print(f"Query: {query}")
 
-    result = conn.execute(query, params)
-    return result.pl()
+    return conn.sql(query, params=params).pl()
 
 
 def find_rows_by_indices_duckdb(
@@ -523,7 +525,7 @@ def find_rows_by_indices_duckdb(
     WHERE CAST(ROW_INDEX AS BIGINT) IN ({indices_str})
     """
 
-    return conn.execute(query, [str(fpath)]).pl()
+    return conn.sql(query, params=[str(fpath)]).pl()
 
 
 def _search_single_batch(
