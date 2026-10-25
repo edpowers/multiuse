@@ -2,10 +2,10 @@
 
 import re
 from datetime import datetime
+from typing import cast
 
 import altair as alt
 import polars as pl
-from rich import print as rprint
 from rich.console import Console
 
 
@@ -21,7 +21,8 @@ def plot_product_sales(
     #    We fill null quantities with 0 (or 1, depending on your business logic)
     df_clean = df.with_columns(
         [
-            pl.col(date_col).cast(pl.Date).dt.truncate("1mo").alias("month"),
+            # polars 2.0 removed the string -> Date cast; parse explicitly.
+            pl.col(date_col).str.to_date().dt.truncate("1mo").alias("month"),
             pl.col(quantity_col).fill_null(0).alias("qty_safe"),
         ],
     )
@@ -45,12 +46,18 @@ def plot_product_sales(
     df_filtered = df_agg.filter(pl.col(product_col).is_in(top_products.implode()))
 
     max_y = df_filtered.get_column("total_quantity").max()
-    y_upper = max_y * 1.05  # 5% headroom
+    if max_y is None:
+        ve_msg = "No rows to plot after filtering to the top products."
+        raise ValueError(ve_msg)
+    y_upper = cast("float", max_y) * 1.05  # 5% headroom
+
+    # altair's @use_signature erases the `Self` return type of every mark_*
+    # method, so the cast is what lets `.encode` resolve.
+    # https://github.com/vega/altair/blob/main/altair/utils/core.py
+    chart = cast("alt.Chart", alt.Chart(df_filtered).mark_line(point=True))
 
     return (
-        alt.Chart(df_filtered.to_pandas())
-        .mark_line(point=True)
-        .encode(
+        chart.encode(
             # Now 'month' actually exists in the dataframe
             x=alt.X("month:T", title="Date", axis=alt.Axis(format="%Y-%b")),
             # y=alt.Y("total_quantity:Q", title="Total Quantity Sold"),
@@ -65,14 +72,14 @@ def plot_product_sales(
                 product_col,
                 alt.Tooltip("total_quantity", format=","),
             ],
-        )
-        .properties(width=800, height=400, title=title)
+        ).properties(width=800, height=400, title=title)
         # .interactive()
     )
 
 
 def plot_transaction_timeline(
     df: pl.DataFrame,
+    *,
     date_col: str = "FILE_DATE",
     start_date: str | None = None,
     end_date: str | None = None,
@@ -149,11 +156,18 @@ def plot_transaction_timeline(
             tickCount="month",
         )
 
-    # Create chart
+    # Create chart.  Cast for the same altair `@use_signature`
+    # limitation as in plot_product_sales.
+    chart = cast(
+        "alt.Chart",
+        alt.Chart(counts).mark_line(
+            point=alt.OverlayMarkDef(size=60, filled=True),
+            strokeWidth=2.5,
+        ),
+    )
+
     return (
-        alt.Chart(counts)
-        .mark_line(point=alt.OverlayMarkDef(size=60, filled=True), strokeWidth=2.5)
-        .encode(
+        chart.encode(
             x=alt.X(x_type, title=x_title, axis=axis_config),
             y=alt.Y(
                 "count:Q",
@@ -220,7 +234,7 @@ def highlight_results(
         columns_to_search = ["COLLATERAL", "SEC_PARTY"]
 
     # For all search terms, remove any special characters:
-    search_terms = list(map(lambda x: re.sub(r"[\^-]", "", x), search_terms))
+    search_terms = [re.sub(r"[\^-]", "", term) for term in search_terms]
 
     highlighted_results = highlight_columns(
         df=results.sample(min(sample_size, results.height)),
@@ -249,26 +263,10 @@ def highlight_results(
             console.print(f"Total rows found - {len(results)}")
         print(capture.get())
 
-    # if print_output:
-    #     for row in sample.iter_rows():
-    #         for col, value in zip(highlighted_results.columns, row, strict=False):
-    #             if col.endswith("_highlighted"):
-    #                 try:
-    #                     rprint(f"{col}:\n{value}\n")
-    #                 except Exception as e:
-    #                     print(f"Error printing {col}: {e}")
-    #         rprint("-" * 50)
-
-    #     print(f"Total rows found - {len(results)}")
-
     if return_highlighted_results:
         return highlighted_results
 
     return results
-
-
-# Example usage:
-# highlighted_df = highlight_results(results, columns_to_search, search_terms, sample_size=100, show_all=False, print_output=True)
 
 
 def highlight_terms(text: str, search_terms: list[str], color: str = "red") -> str:
@@ -339,31 +337,3 @@ def highlight_columns(
                 .alias(f"{col}_highlighted"),
             )
     return df
-
-
-def print_random_samples(
-    results: pl.DataFrame,
-    column: str = "COLLATERAL",
-    n: int = 5,
-) -> pl.DataFrame:
-    """
-    Select n random rows from a specified column in the results DataFrame and print them.
-
-    Args:
-    results (pl.DataFrame): The input DataFrame
-    column (str): The name of the column to sample from
-    n (int): The number of random samples to print (default: 5)
-
-    Returns:
-    None
-    """
-    random_sample = results.sample(n=n)
-    random_sample_data = random_sample.select(column)
-    list_of_data = random_sample_data.to_pandas().squeeze().tolist()
-
-    for i, data in enumerate(list_of_data, 1):
-        print()
-        rprint(f"{i}. {data}")
-        print()
-
-    return random_sample
