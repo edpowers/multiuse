@@ -5,7 +5,6 @@ from datetime import datetime
 
 import altair as alt
 import polars as pl
-from rich import print as rprint
 from rich.console import Console
 
 
@@ -249,26 +248,10 @@ def highlight_results(
             console.print(f"Total rows found - {len(results)}")
         print(capture.get())
 
-    # if print_output:
-    #     for row in sample.iter_rows():
-    #         for col, value in zip(highlighted_results.columns, row, strict=False):
-    #             if col.endswith("_highlighted"):
-    #                 try:
-    #                     rprint(f"{col}:\n{value}\n")
-    #                 except Exception as e:
-    #                     print(f"Error printing {col}: {e}")
-    #         rprint("-" * 50)
-
-    #     print(f"Total rows found - {len(results)}")
-
     if return_highlighted_results:
         return highlighted_results
 
     return results
-
-
-# Example usage:
-# highlighted_df = highlight_results(results, columns_to_search, search_terms, sample_size=100, show_all=False, print_output=True)
 
 
 def highlight_terms(text: str, search_terms: list[str], color: str = "red") -> str:
@@ -339,31 +322,3 @@ def highlight_columns(
                 .alias(f"{col}_highlighted"),
             )
     return df
-
-
-def print_random_samples(
-    results: pl.DataFrame,
-    column: str = "COLLATERAL",
-    n: int = 5,
-) -> pl.DataFrame:
-    """
-    Select n random rows from a specified column in the results DataFrame and print them.
-
-    Args:
-    results (pl.DataFrame): The input DataFrame
-    column (str): The name of the column to sample from
-    n (int): The number of random samples to print (default: 5)
-
-    Returns:
-    None
-    """
-    random_sample = results.sample(n=n)
-    random_sample_data = random_sample.select(column)
-    list_of_data = random_sample_data.to_pandas().squeeze().tolist()
-
-    for i, data in enumerate(list_of_data, 1):
-        print()
-        rprint(f"{i}. {data}")
-        print()
-
-    return random_sample
